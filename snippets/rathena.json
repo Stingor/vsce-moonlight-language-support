@@ -26,7 +26,8 @@
     "Warp definition": {
         "prefix": "defwarp",
         "body": [
-            "$1,$2,$3,$4\twarp\t$5\t$6,$7,$8,$9,$10"
+            "$1,$2,$3,$4\twarp\t$5\t$6,$7,$8,$9,$10",
+            "$1,$2,$3,$4\twarp2\t$5\t$6,$7,$8,$9,$10"
         ]
     },
     "Shop definition": {

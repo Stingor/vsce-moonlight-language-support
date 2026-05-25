@@ -1,10 +1,11 @@
 'use strict'
 
+const moonHeader: string = '//===== Moonlight'
 const raHeader: string = '//===== rAthena Script'
 const shortHeader: string = '//!rathena'
 
 export function isRathenaHeader (firstLine: string): boolean {
-  if (firstLine.startsWith(raHeader) || firstLine.startsWith(shortHeader)) {
+    if (firstLine.startsWith(moonHeader) || firstLine.startsWith(raHeader) || firstLine.startsWith(shortHeader)) {
     return true
   }
 

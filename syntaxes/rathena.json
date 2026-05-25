@@ -3,7 +3,8 @@
 	"scopeName": "source.rathena",
 	"name": "rAthena",
 	"fileTypes": [
-		"rascript"
+		"rascript",
+		"npc"
 	],
 	"patterns": [
 		{
@@ -19,7 +20,7 @@
 			"name": "constant.language.maps.rathena"
 		},
 		{
-			"match": "^(On.+):$",
+			"match": "^On[A-Za-z0-9_]+:",
 			"name": "entity.name.label.rathena"
 		},
 		{
@@ -27,7 +28,7 @@
 			"name": "constant.language.const.rathena"
 		},
 		{
-			"match": "\\b\t(shop|cashshop|itemshop|pointshop|marketshop|trader|script|duplicate|warp|warp2|boss_monster|monster)\t\\b",
+			"match": "\\b\t+(shop|cashshop|itemshop|pointshop|marketshop|trader|script|duplicate|warp|warp2|boss_monster|monster)\t+\\b",
 			"name": "entity.name.type.script.rathena"
 		},
 		{

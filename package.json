@@ -1,15 +1,15 @@
 {
-    "name": "rathena-language-support",
-    "displayName": "rAthena Language Support",
-    "description": "Adds syntax highlighting and code snippets for the rAthena Scripting Language",
-    "publisher": "rAthena",
+    "name": "moonlight-language-support",
+    "displayName": "Moonlight Language Support",
+    "description": "Adds syntax highlighting and code snippets for the moonlight Scripting Language",
+    "publisher": "Stingor",
     "icon": "rathena-icon.avif",
     "repository": {
         "type": "git",
-        "url": "https://github.com/rathena/vsce-rathena-language-support"
+        "url": "https://github.com/Stingor/vsce-moonlight-language-support"
     },
     "author": {
-        "name": "rAthena Dev Team"
+        "name": "Moonlight"
     },
     "contributors": [
         {
@@ -26,9 +26,9 @@
         }
     ],
     "license": "MIT",
-    "private": false,
+    "private": true,
     "bugs": {
-        "url": "https://github.com/rathena/vsce-rathena-language-support/issues"
+        "url": "https://github.com/Stingor/vsce-moonlight-language-support/issues"
     },
     "version": "1.1.3",
     "engines": {
@@ -51,7 +51,8 @@
                     "rathena"
                 ],
                 "extensions": [
-                    ".rascript"
+                    ".rascript",
+                    ".npc"
                 ],
                 "configuration": "./language-configuration.json"
             }
