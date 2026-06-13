@@ -8,7 +8,7 @@
 	],
 	"patterns": [
 		{
-			"match": "\\b(if|else|switch|case|break|default|for|do|while|return|goto)\\b",
+			"match": "\\b(if|else|switch|case|break|default|for|do|while|return|goto|gotomain|restartnpc)\\b",
 			"name": "keyword.control.rathena"
 		},
 		{
