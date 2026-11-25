@@ -30,7 +30,7 @@
     "bugs": {
         "url": "https://github.com/Stingor/vsce-moonlight-language-support/issues"
     },
-    "version": "1.1.4",
+    "version": "1.2.0",
     "engines": {
         "vscode": "^1.120.0"
     },
@@ -39,7 +39,7 @@
         "Snippets"
     ],
     "activationEvents": [
-        "onStartupFinished"
+        "onLanguage:rathena"
     ],
     "main": "./out/extension",
     "contributes": {
@@ -54,13 +54,14 @@
                     ".rascript",
                     ".npc"
                 ],
+                "firstLine": "^//(===== (rAthena Script|Moonlight)|!rathena)",
                 "configuration": "./language-configuration.json"
             }
         ],
         "commands": [
             {
                 "command": "rathena.wrapWithColorCodes",
-                "title": "Wrap in Color Codes"
+                "title": "Entourer d'un code couleur"
             }
         ],
         "menus": {
@@ -92,26 +93,31 @@
             }
         },
         "configuration": {
-            "title": "rAthena Script Syntax",
+            "title": "Scripts Moonlight",
             "properties": {
                 "rathena.renderColors": {
                     "type": "boolean",
                     "default": true,
-                    "description": "Render color codes in text",
+                    "description": "Colorer le texte des chaînes selon leurs codes ^RRGGBB, jusqu'à la fin de la chaîne.",
                     "order": 1
                 },
                 "rathena.hideColorCodes": {
                     "type": "boolean",
                     "default": true,
-                    "description": "Hide color codes (^xxxxxx) until selected. This option requires 'Render Colors' to be enabled.",
-                    "order": 2,
-                    "when": "config.rathena.renderColors"
+                    "description": "Masquer les codes ^RRGGBB, sauf dans la chaîne où se trouve le curseur. Demande « Render Colors ».",
+                    "order": 2
                 },
                 "rathena.showColorPicker": {
                     "type": "boolean",
                     "default": true,
-                    "description": "Show color picker for color codes",
+                    "description": "Proposer le sélecteur de couleur sur les codes ^RRGGBB.",
                     "order": 3
+                },
+                "rathena.reopenInWindows1252": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Rouvrir en Windows 1252 un script reconnu par sa première ligne qui n'est pas de l'UTF-8 valide, avant qu'un enregistrement ne perde ses accents.",
+                    "order": 4
                 }
             }
         }
@@ -121,7 +127,8 @@
         "compile": "tsc -p ./",
         "lint": "eslint \"src/**/*.ts\"",
         "watch": "tsc -watch -p ./",
-        "test": "mocha"
+        "generate": "node scripts/generate-grammar.js --server ../moonlight",
+        "test": "tsc -p ./ && mocha"
     },
     "devDependencies": {
         "@types/mocha": "^10.0.10",
@@ -135,7 +142,8 @@
         "eslint-plugin-n": "^15.7.0",
         "eslint-plugin-promise": "^6.1.1",
         "mocha": "^10.8.2",
-        "ts-node": "^10.9.1",
-        "typescript": "^5.0.4"
+        "typescript": "^5.0.4",
+        "vscode-oniguruma": "^2.0.1",
+        "vscode-textmate": "^9.3.2"
     }
 }

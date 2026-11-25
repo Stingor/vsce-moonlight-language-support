@@ -1,0 +1,101 @@
+{
+	"scopeName": "source.rathena",
+	"name": "rAthena",
+	"fileTypes": [
+		"rascript",
+		"npc"
+	],
+	"patterns": [
+		{ "include": "#comments" },
+		{ "include": "#strings" },
+		{ "include": "#npc-header" },
+		{ "include": "#labels" },
+		{ "include": "#local-function" },
+		{ "include": "#keywords" },
+		{ "include": "#functions" },
+		{ "include": "#parameters" },
+		{ "include": "#constants" },
+		{ "include": "#variables" },
+		{ "include": "#maps" },
+		{ "include": "#numbers" },
+		{ "include": "#operators" }
+	],
+	"repository": {
+		"comments": {
+			"patterns": [
+				{ "begin": "/\\*", "end": "\\*/", "name": "comment.block.rathena" },
+				{ "match": "//.*$", "name": "comment.line.double-slash.rathena" }
+			]
+		},
+		"strings": {
+			"match": "\"(?:[^\"\\\\\\n]|\\\\.)*\"?",
+			"name": "string.quoted.double.rathena"
+		},
+		"npc-header": {
+			"match": "^([^\\t/][^\\t]*)\\t(script|duplicate|shop|cashshop|itemshop|pointshop|marketshop|trader|warp|warp2|monster|boss_monster|mapflag)(?:\\(([^)]*)\\))?\\t([^\\t]*)",
+			"captures": {
+				"1": { "patterns": [ { "include": "#maps" }, { "include": "#numbers" } ] },
+				"2": { "name": "entity.name.type.script.rathena" },
+				"3": { "name": "storage.modifier.rathena" },
+				"4": { "name": "entity.name.function.npc.rathena" }
+			}
+		},
+		"labels": {
+			"match": "^\\s*(?!default\\b)([A-Za-z_][A-Za-z0-9_]*)(:)(?!:)",
+			"captures": {
+				"1": { "name": "entity.name.label.rathena" }
+			}
+		},
+		"local-function": {
+			"match": "\\b(function)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*(?=[{;])",
+			"captures": {
+				"1": { "name": "storage.type.function.rathena" },
+				"2": { "name": "entity.name.function.rathena" }
+			}
+		},
+		"keywords": {
+			"match": "\\b(if|else|switch|case|break|continue|default|for|do|while|return|goto|end|function)\\b",
+			"name": "keyword.control.rathena"
+		},
+		"functions": {
+			"match": "GENERATED",
+			"name": "support.function.rathena"
+		},
+		"parameters": {
+			"match": "GENERATED",
+			"name": "variable.language.parameter.rathena"
+		},
+		"constants": {
+			"patterns": [
+				{ "match": "\\b(true|false)\\b", "name": "constant.language.boolean.rathena" },
+				{ "match": "GENERATED", "name": "constant.language.rathena" },
+				{ "match": "\\b[A-Z][A-Z0-9]*_[A-Z0-9_]+\\b", "name": "constant.language.rathena" },
+				{ "match": "\\bb[A-Z][A-Za-z0-9]*\\b", "name": "constant.language.bonus.rathena" }
+			]
+		},
+		"variables": {
+			"patterns": [
+				{ "match": "\\$@[A-Za-z_][A-Za-z0-9_]*\\$?", "name": "variable.other.temporary.global.rathena" },
+				{ "match": "\\$[A-Za-z_][A-Za-z0-9_]*\\$?", "name": "variable.other.global.rathena" },
+				{ "match": "\\.@[A-Za-z_][A-Za-z0-9_]*\\$?", "name": "variable.other.scope.rathena" },
+				{ "match": "\\.[A-Za-z_][A-Za-z0-9_]*\\$?", "name": "variable.other.npc.rathena" },
+				{ "match": "@[A-Za-z_][A-Za-z0-9_]*\\$?", "name": "variable.other.temporary.character.rathena" },
+				{ "match": "##[A-Za-z_][A-Za-z0-9_]*\\$?", "name": "variable.other.permanent.global.rathena" },
+				{ "match": "#[A-Za-z_][A-Za-z0-9_]*\\$?", "name": "variable.other.permanent.account.rathena" },
+				{ "match": "'[A-Za-z_][A-Za-z0-9_]*\\$?", "name": "variable.other.instance.rathena" }
+			]
+		},
+		"maps": {
+			"match": "GENERATED",
+			"name": "constant.language.maps.rathena"
+		},
+		"numbers": {
+			"match": "\\b(0[xX][0-9A-Fa-f]+|[0-9]+)\\b",
+			"name": "constant.numeric.rathena"
+		},
+		"operators": {
+			"match": "<=|>=|==|!=|&&|\\|\\||<<|>>|\\+\\+|--|[-+*/%=<>!&|^~?:]",
+			"name": "keyword.operator.rathena"
+		}
+	}
+}

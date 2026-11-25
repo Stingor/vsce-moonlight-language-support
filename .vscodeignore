@@ -3,3 +3,10 @@
 .gitignore
 vsc-extension-quickstart.md
 *.vsix
+src/**
+scripts/**
+out/test/**
+**/*.map
+tsconfig.json
+.eslintrc.json
+.mocharc.json

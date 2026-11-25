@@ -1,52 +1,34 @@
 'use strict'
 
 import * as vscode from 'vscode'
-import { isRathenaHeader } from './rathena'
-import { initializeDecorations, disposeDecorations } from './colorDecorations'
+import { registerDocumentCache } from './documentCache'
+import { registerColorDecorations } from './colorDecorations'
+import { registerDiagnostics } from './diagnostics'
+import { registerEncodingGuard } from './encoding'
+import { registerNavigation } from './navigation'
 
-function associateFile (doc: vscode.TextDocument): void {
-  if (isRathenaHeader(doc.lineAt(0).text)) {
-    vscode.languages.setTextDocumentLanguage(doc, 'rathena')
-  }
-}
+const DEFAULT_WRAP_HEX = 'ff0000'
+const RESET_CODE = '^000000'
 
-// Function to wrap selected text with color codes
 function wrapWithColorCodes (editor: vscode.TextEditor): void {
-  const defaultColor = 'ff0000' // Default red color
-  const selections = editor.selections
-
   editor.edit(editBuilder => {
-    for (const selection of selections) {
-      if (!selection.isEmpty) {
-        const text = editor.document.getText(selection)
-        const wrappedText = `^${defaultColor}${text}^000000` // Add color and reset code
-        editBuilder.replace(selection, wrappedText)
-      }
+    for (const selection of editor.selections) {
+      if (selection.isEmpty) continue
+      const text = editor.document.getText(selection)
+      editBuilder.replace(selection, `^${DEFAULT_WRAP_HEX}${text}${RESET_CODE}`)
     }
   })
 }
 
 export function activate (context: vscode.ExtensionContext): void {
-  for (const doc of vscode.workspace.textDocuments) {
-    associateFile(doc)
-  }
-
-  // Register the wrap with color codes command
-  const disposable = vscode.commands.registerTextEditorCommand(
-    'rathena.wrapWithColorCodes',
-    wrapWithColorCodes
+  registerDocumentCache(context)
+  registerEncodingGuard(context)
+  registerDiagnostics(context)
+  registerColorDecorations(context)
+  registerNavigation(context)
+  context.subscriptions.push(
+    vscode.commands.registerTextEditorCommand('rathena.wrapWithColorCodes', wrapWithColorCodes)
   )
-  context.subscriptions.push(disposable)
-
-  // Also associate file on open and save
-  context.subscriptions.push(vscode.workspace.onDidOpenTextDocument(associateFile))
-  context.subscriptions.push(vscode.workspace.onDidSaveTextDocument(associateFile))
-
-  // Initialize color decorations support
-  initializeDecorations(context)
 }
 
-export function deactivate (): void {
-  // Clean up color decorations
-  disposeDecorations()
-}
+export function deactivate (): void {}

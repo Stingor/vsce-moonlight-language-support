@@ -1,28 +1,37 @@
 {
     "comments": {
-        // symbol used for single line comment. Remove this entry if your language does not support line comments
         "lineComment": "//",
-        // symbols used for start and end a block comment. Remove this entry if your language does not support block comments
         "blockComment": [ "/*", "*/" ]
     },
-    // symbols used as brackets
     "brackets": [
         ["{", "}"],
         ["[", "]"],
         ["(", ")"]
     ],
-    // symbols that are auto closed when typing
     "autoClosingPairs": [
         ["{", "}"],
         ["[", "]"],
         ["(", ")"],
-        ["\"", "\""]
+        { "open": "\"", "close": "\"", "notIn": ["string", "comment"] }
     ],
-    // symbols that that can be used to surround a selection
     "surroundingPairs": [
         ["{", "}"],
         ["[", "]"],
         ["(", ")"],
         ["\"", "\""]
-    ]
+    ],
+    // Un mot est une variable entière, préfixe de portée et suffixe « $ » compris :
+    // .@var$, $@var, ##var, 'var. Le double-clic et la recherche d'occurrences
+    // prennent alors la variable, pas seulement son nom.
+    "wordPattern": "(-?\\d+)|((\\.@|\\$@|##|[.$@#'])?[A-Za-z_][A-Za-z0-9_]*\\$?)",
+    "folding": {
+        "markers": {
+            "start": "^\\s*//\\s*#?region\\b",
+            "end": "^\\s*//\\s*#?endregion\\b"
+        }
+    },
+    "indentationRules": {
+        "increaseIndentPattern": "^.*\\{[^}\"']*$",
+        "decreaseIndentPattern": "^\\s*\\}"
+    }
 }

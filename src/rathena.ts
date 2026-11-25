@@ -1,13 +1,10 @@
 'use strict'
 
-const moonHeader: string = '//===== Moonlight'
-const raHeader: string = '//===== rAthena Script'
-const shortHeader: string = '//!rathena'
+// La première ligne qui fait reconnaître un script, quelle que soit son
+// extension. package.json en porte la même expression (`firstLine`) : un essai
+// vérifie qu'elles ne divergent pas.
+export const FIRST_LINE_PATTERN = '^//(===== (rAthena Script|Moonlight)|!rathena)'
 
 export function isRathenaHeader (firstLine: string): boolean {
-    if (firstLine.startsWith(moonHeader) || firstLine.startsWith(raHeader) || firstLine.startsWith(shortHeader)) {
-    return true
-  }
-
-  return false
+  return new RegExp(FIRST_LINE_PATTERN).test(firstLine)
 }
