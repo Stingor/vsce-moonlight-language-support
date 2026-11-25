@@ -1,11 +1,13 @@
 'use strict'
 
 // Plan du fichier (PNJ, fonctions, étiquettes) et « aller à la définition »
-// pour callfunc, callsub, goto, donpcevent "Pnj::OnX", duplicate(Source).
+// pour callfunc, callsub, goto, donpcevent "Pnj::OnX", duplicate(Source), et
+// pour une commande, jusqu'à son code C++ dans le serveur.
 
 import * as vscode from 'vscode'
 import { TextDecoder } from 'util'
 import { analyze } from './documentCache'
+import { type BuiltinTarget, parseBuiltins } from './builtins'
 import { regionAt, contentOf } from './lexer'
 import { type NamedLine, type NpcHeader, type ParsedScript, npcKeys, parseScript } from './npcSyntax'
 
@@ -14,8 +16,38 @@ const SCRIPT_GLOB = '{**/*.npc,**/npc/**/*.txt}'
 const EXCLUDE_GLOB = '**/node_modules/**'
 const IDENTIFIER = /[A-Za-z_][A-Za-z0-9_]*/
 const LABEL_SEPARATOR = '::'
+// Le source du serveur qui définit les commandes de script.
+const BUILTINS_GLOB = '**/src/map/script.cpp'
 // Le 1252 décode tout octet ; un nom de PNJ y est lisible tel qu'écrit.
 const decoder = new TextDecoder('latin1')
+
+// Les commandes du serveur ouvert dans l'espace de travail, relues quand
+// script.cpp change.
+class BuiltinIndex {
+  private loaded: Promise<Array<{ uri: vscode.Uri, targets: Map<string, BuiltinTarget> }>> | undefined
+
+  reset (): void {
+    this.loaded = undefined
+  }
+
+  async find (command: string): Promise<vscode.Location[]> {
+    if (this.loaded === undefined) {
+      this.loaded = (async () => {
+        const uris = await vscode.workspace.findFiles(BUILTINS_GLOB, EXCLUDE_GLOB)
+        return await Promise.all(uris.map(async uri => ({
+          uri,
+          targets: parseBuiltins(decoder.decode(await vscode.workspace.fs.readFile(uri)))
+        })))
+      })()
+    }
+    const found: vscode.Location[] = []
+    for (const { uri, targets } of await this.loaded) {
+      const target = targets.get(command.toLowerCase())
+      if (target !== undefined) found.push(new vscode.Location(uri, new vscode.Position(target.line, target.column)))
+    }
+    return found
+  }
+}
 
 // ---------------------------------------------------------------- plan
 
@@ -153,7 +185,7 @@ function localTargets (doc: vscode.TextDocument, script: ParsedScript, name: str
     .map(item => new vscode.Location(doc.uri, new vscode.Position(item.line, item.column)))
 }
 
-async function definitions (index: WorkspaceIndex, doc: vscode.TextDocument, position: vscode.Position): Promise<vscode.Location[]> {
+async function definitions (index: WorkspaceIndex, builtins: BuiltinIndex, doc: vscode.TextDocument, position: vscode.Position): Promise<vscode.Location[]> {
   const analysis = analyze(doc)
   const offset = doc.offsetAt(position)
   const inString = regionAt(analysis.regions.strings, offset)
@@ -173,16 +205,25 @@ async function definitions (index: WorkspaceIndex, doc: vscode.TextDocument, pos
   const wordRange = doc.getWordRangeAtPosition(position, IDENTIFIER)
   if (wordRange === undefined) return []
   const word = doc.getText(wordRange)
+  // Une étiquette ou une fonction locale masque une commande du même nom.
   const local = localTargets(doc, analysis.script(), word, position.line)
   if (local.length > 0) return local
+  const command = await builtins.find(word)
+  if (command.length > 0) return command
   return (await index.npcs(word)).map(toLocation)
 }
 
 export function registerNavigation (context: vscode.ExtensionContext): void {
   const index = new WorkspaceIndex()
+  const builtins = new BuiltinIndex()
   const watcher = vscode.workspace.createFileSystemWatcher(SCRIPT_GLOB)
+  const builtinsWatcher = vscode.workspace.createFileSystemWatcher(BUILTINS_GLOB)
   context.subscriptions.push(
     watcher,
+    builtinsWatcher,
+    builtinsWatcher.onDidCreate(() => { builtins.reset() }),
+    builtinsWatcher.onDidChange(() => { builtins.reset() }),
+    builtinsWatcher.onDidDelete(() => { builtins.reset() }),
     watcher.onDidCreate(uri => { index.updateFromDisk(uri) }),
     watcher.onDidChange(uri => { index.updateFromDisk(uri) }),
     watcher.onDidDelete(uri => { index.remove(uri) }),
@@ -190,7 +231,7 @@ export function registerNavigation (context: vscode.ExtensionContext): void {
       provideDocumentSymbols: documentSymbols
     }),
     vscode.languages.registerDefinitionProvider('rathena', {
-      provideDefinition: async (doc, position) => await definitions(index, doc, position)
+      provideDefinition: async (doc, position) => await definitions(index, builtins, doc, position)
     })
   )
 }
