@@ -179,7 +179,11 @@ function ownerAt (script: ParsedScript, line: number): number {
 
 function localTargets (doc: vscode.TextDocument, script: ParsedScript, name: string, line: number): vscode.Location[] {
   const owner = ownerAt(script, line)
-  const matches = [...script.labels, ...script.localFunctions].filter(item => item.name === name)
+  // ⚠ SANS CASSE : le moteur de script range étiquettes et fonctions locales
+  // par un hachage en minuscules (`calc_hash`, `strcasecmp`), et `goto L_fin`
+  // mène à `L_Fin:`.
+  const wanted = name.toLowerCase()
+  const matches = [...script.labels, ...script.localFunctions].filter(item => item.name.toLowerCase() === wanted)
   const sameNpc = matches.filter(item => item.owner === owner)
   return (sameNpc.length > 0 ? sameNpc : matches)
     .map(item => new vscode.Location(doc.uri, new vscode.Position(item.line, item.column)))

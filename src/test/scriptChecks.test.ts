@@ -50,6 +50,10 @@ describe('checkScript — étiquettes', () => {
     assert.deepEqual(check(text), [])
   })
 
+  it('trouve l\'étiquette sans tenir compte de la casse, comme le moteur', () => {
+    assert.deepEqual(check(HEAD + '\tcallsub S_Warpchar,"prontera";\nS_WarpChar:\n\tend;\n}\n'), [])
+  })
+
   it('signale une étiquette d\'un autre PNJ, ou absente', () => {
     const text = HEAD + '\tgoto L_Ailleurs;\n}\n' + '-\tscript\tAutre\t-1,{\nL_Ailleurs:\n\tend;\n}\n'
     const problems = check(text)

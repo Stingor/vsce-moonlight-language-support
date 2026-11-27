@@ -103,19 +103,19 @@ function checkLabels (blank: string, blocks: Block[], problems: CheckProblem[]):
   const defined = new Map<number, Set<string>>()
   for (const match of blank.matchAll(LABEL_DEFINITION)) {
     const name = match[1]
-    if (NOT_LABELS.has(name)) continue
+    if (NOT_LABELS.has(name.toLowerCase())) continue
     const block = blockAt(blocks, (match.index ?? 0) + match[0].indexOf(name))
     if (block === undefined) continue
     let names = defined.get(block.header)
     if (names === undefined) defined.set(block.header, names = new Set())
-    names.add(name)
+    names.add(name.toLowerCase())
   }
   for (const match of blank.matchAll(LABEL_USE)) {
     const name = match[2]
     const start = (match.index ?? 0) + match[0].length - name.length
     const block = blockAt(blocks, start)
     if (block === undefined || !block.hasCode) continue
-    if (defined.get(block.header)?.has(name) === true) continue
+    if (defined.get(block.header)?.has(name.toLowerCase()) === true) continue
     problems.push({
       start,
       end: start + name.length,
