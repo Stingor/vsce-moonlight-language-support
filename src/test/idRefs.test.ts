@@ -80,4 +80,10 @@ describe('constantes en argument', () => {
     assert.deepEqual(allRefs(text, blank, regions).map(ref => ref.constant ?? ref.id), ['Red_Potion', 'MOB_PORING'])
     assert.equal(refAt(text, blank, regions, text.indexOf('Potion'))?.constant, 'Red_Potion')
   })
+
+  it('reconnaît une constante qui commence par un chiffre, pas un nombre', () => {
+    const text = '\tgetitem 3D_Glasses,1;\n\tgetitem 501,1;'
+    const { blank, regions } = parts(text)
+    assert.deepEqual(allRefs(text, blank, regions).map(ref => ref.constant ?? ref.id), ['3D_Glasses', 501])
+  })
 })

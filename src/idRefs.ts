@@ -11,6 +11,7 @@
 
 import { type IdKind, idArgument, idArgumentKind, idAt } from './idHover'
 import { type Regions, contentOf, regionAt } from './lexer'
+import { SCRIPT_WORD } from './scriptConstants'
 
 export interface IdRef {
   kind: IdKind
@@ -34,7 +35,7 @@ function constantAt (blank: string, offset: number): IdRef | undefined {
   let end = offset
   while (end < blank.length && word.test(blank[end])) ++end
   const name = blank.slice(start, end)
-  if (!/^[A-Za-z_]/.test(name)) return undefined
+  if (!SCRIPT_WORD.test(name)) return undefined
   if (start > 0 && /[.@$'#]/.test(blank[start - 1])) return undefined
   // Un appel ou un tableau n'est pas une constante.
   if (/^\s*[([]/.test(blank.slice(end, end + 8))) return undefined
@@ -106,7 +107,7 @@ export function allRefs (text: string, blank: string, regions: Regions): IdRef[]
     const code = idAt(blank, match.index ?? 0)
     if (code !== undefined) refs.push({ kind: code.kind, id: code.id, start: code.start, end: code.end })
   }
-  for (const match of blank.matchAll(/(?<![A-Za-z0-9_])[A-Za-z_][A-Za-z0-9_]*/g)) {
+  for (const match of blank.matchAll(/(?<![A-Za-z0-9_])[0-9]*[A-Za-z_][A-Za-z0-9_]*/g)) {
     const constant = constantAt(blank, match.index ?? 0)
     if (constant !== undefined) refs.push(constant)
   }

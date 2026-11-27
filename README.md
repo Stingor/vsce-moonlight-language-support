@@ -80,9 +80,9 @@ Sur chacune :
 - **F12** ouvre son entrée dans le `.yml` qui l'a écrite en dernier — celui dont la valeur l'emporte, donc celui où la corriger ;
 - **un identifiant absent des tables** que charge le serveur est signalé pendant la frappe (`rathena.checkScripts`) : un `getitem` ou un `monster` qui ne donnera rien.
 
-À la place d'un identifiant, **la complétion propose les objets ou les monstres par leur nom** — `red pot` trouve Red Potion ; le nom Aegis et le nombre se cherchent aussi. Elle insère **la constante** (`Red_Potion`, `MOB_PORING`), qui documente le script d'elle-même et vaut dans toute commande (`rathena.completeIdsAs` : `constant` ou `id`). Sans constante sûre, le nom en chaîne si la commande l'accepte (`getitem "3D_Glasses"`), sinon le numéro :
+À la place d'un identifiant, **la complétion propose les objets ou les monstres par leur nom** — `red pot` trouve Red Potion ; le nom Aegis et le nombre se cherchent aussi. Elle insère **la constante** (`Red_Potion`, `MOB_PORING`), qui documente le script d'elle-même et vaut dans toute commande (`rathena.completeIdsAs` : `constant` ou `id`). Sans constante sûre, le nom en chaîne si la commande l'accepte (`getitem "Valkyrja's_Shield"`), sinon le numéro :
 
-- un nom qui commence par un chiffre (`3D_Glasses`) ou porte un caractère hors identifiant (`Valkyrja's_Shield`) : le moteur ne le lirait pas comme un nom ;
+- un nom que le moteur ne lit pas comme un mot : un caractère hors lettres, chiffres et `_` (`Valkyrja's_Shield` — l'apostrophe ouvre une variable d'instance), ou des chiffres seuls. Un chiffre en tête ne gêne pas : `getitem 3D_Glasses` se lit comme `getitem Moonlight_Coin` ;
 - un nom qui heurte une constante déjà posée (`script_constants.hpp`, `db/const.yml`) ou un autre objet : le serveur ne l'enregistre pas, et il vaudrait l'autre.
 
 Une constante d'objet inconnue n'est pas signalée — ce peut être une variable de personnage, qui s'écrit sans préfixe ; un `MOB_…` inconnu l'est.

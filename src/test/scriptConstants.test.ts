@@ -8,6 +8,8 @@ import {
 
 const potion: DbEntry = { id: 501, aegis: 'Red_Potion', name: 'Red Potion' }
 const glasses: DbEntry = { id: 5788, aegis: '3D_Glasses', name: '3D Glasses' }
+const shield: DbEntry = { id: 2115, aegis: 'Valkyrja\'s_Shield', name: 'Valkyrja\'s Shield' }
+const digits: DbEntry = { id: 9000, aegis: '2024', name: 'Année' }
 const poring: DbEntry = { id: 1002, aegis: 'PORING', name: 'Poring' }
 const NONE = new Set<string>()
 
@@ -30,13 +32,16 @@ describe('readHardcodedConstants', () => {
 })
 
 describe('constantOf', () => {
-  it('donne le nom Aegis d\'un objet, MOB_ et le nom d\'un monstre', () => {
+  it('donne le nom Aegis d\'un objet, chiffre en tête compris, et MOB_ et le nom d\'un monstre', () => {
     assert.equal(constantOf('item', potion, NONE, NONE), 'Red_Potion')
+    // `is_number` ne prend pas « 3D_Glasses » pour un nombre : c'est un mot.
+    assert.equal(constantOf('item', glasses, NONE, NONE), '3D_Glasses')
     assert.equal(constantOf('mob', poring, NONE, NONE), 'MOB_PORING')
   })
 
-  it('n\'en donne pas à un nom qui commence par un chiffre, déjà pris, ou partagé', () => {
-    assert.equal(constantOf('item', glasses, NONE, NONE), undefined)
+  it('n\'en donne pas à un nom hors mot, de chiffres seuls, déjà pris, ou partagé', () => {
+    assert.equal(constantOf('item', shield, NONE, NONE), undefined)
+    assert.equal(constantOf('item', digits, NONE, NONE), undefined)
     assert.equal(constantOf('item', potion, new Set(['red_potion']), NONE), undefined)
     assert.equal(constantOf('item', potion, NONE, sharedAegisNames([potion, { ...potion, id: 9999 }])), undefined)
   })
@@ -46,8 +51,9 @@ describe('insertionFor', () => {
   const free = { byName: true, quoted: false }
   it('insère la constante, sinon le nom en chaîne si la commande l\'accepte, sinon le numéro', () => {
     assert.equal(insertionFor('item', potion, free, 'constant', NONE, NONE), 'Red_Potion')
-    assert.equal(insertionFor('item', glasses, free, 'constant', NONE, NONE), '"3D_Glasses"')
-    assert.equal(insertionFor('item', glasses, { byName: false, quoted: false }, 'constant', NONE, NONE), '5788')
+    assert.equal(insertionFor('item', glasses, free, 'constant', NONE, NONE), '3D_Glasses')
+    assert.equal(insertionFor('item', shield, free, 'constant', NONE, NONE), '"Valkyrja\'s_Shield"')
+    assert.equal(insertionFor('item', shield, { byName: false, quoted: false }, 'constant', NONE, NONE), '2115')
     assert.equal(insertionFor('mob', poring, { byName: false, quoted: false }, 'constant', NONE, NONE), 'MOB_PORING')
   })
 

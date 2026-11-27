@@ -13,13 +13,21 @@
 // - un nom qui heurte une constante déjà posée (celles de
 //   `script_constants.hpp`, de `db/const.yml`, ou un autre objet du même nom) :
 //   le serveur la saute, et le nom vaut alors l'AUTRE constante ;
-// - un nom qui n'est pas un identifiant (`3D_Glasses` commence par un
-//   chiffre) : le moteur lirait le nombre 3, puis une faute.
+// - un nom que le moteur ne lit pas comme un mot : un caractère hors lettres,
+//   chiffres et `_` (`Valkyrja's_Shield` — l'apostrophe ouvre une variable
+//   d'instance), ou des chiffres seuls, qu'il lit comme un nombre.
+// ⚠ UN CHIFFRE EN TÊTE NE GÊNE PAS : `is_number` ne prend pour un nombre que
+// des chiffres QUI NE SONT PAS suivis d'une lettre ou d'un `_`, et `skip_word`
+// lit lettres, chiffres et `_` dans n'importe quel ordre — `getitem 3D_Glasses`
+// se lit comme `getitem Moonlight_Coin`.
 // Le moteur ignore la casse des noms : les collisions se comparent sans elle.
 
 import { type DbEntry, type IdKind, readDbFile } from './idHover'
 
-const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/
+// Un mot pour le moteur : lettres, chiffres et `_`, avec au moins une lettre
+// ou un `_` après les chiffres de tête.
+export const SCRIPT_WORD = /^[0-9]*[A-Za-z_][A-Za-z0-9_]*$/
+const IDENTIFIER = SCRIPT_WORD
 
 // Les noms que `script_constants.hpp` enregistre, en minuscules.
 export function readHardcodedConstants (header: string): Set<string> {
