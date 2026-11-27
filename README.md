@@ -69,6 +69,15 @@ Chaque vérification préfère se taire que se tromper : un menu composé à l'e
 
 Survoler l'identifiant d'un objet ou d'un monstre donne son nom, son nom Aegis et, pour un monstre, son niveau — lus dans les tables que charge le serveur ouvert (`db/item_db.yml`, `db/mob_db.yml` et leurs imports actifs). Un identifiant absent de ces tables le dit. Le nombre n'est nommé que par la commande qui le lit (`getitem`, `countitem`, `delitem`, `monster`, `areamonster`…) et s'il est l'argument entier.
 
+## Depuis le jeu
+
+Le client moonclient du staff ouvre les scripts dans VSCode :
+
+- **Ouvrir la source**, dans la barre de titre du dialogue d'un PNJ ou dans ses propriétés, ouvre son script à la ligne de son en-tête ;
+- **Alt+clic sur une ligne du dialogue** ouvre le script au `mes` qui l'a dite. Le client passe par l'adresse `vscode://stingor.moonlight-language-support/mes`, que l'extension reçoit dans la dernière fenêtre active : elle y cherche, dans le PNJ, la ligne dont les chaînes couvrent le plus le texte lu — codes couleur et morceaux calculés compris. Introuvable, le script s'ouvre à l'en-tête du PNJ.
+
+La fenêtre qui reçoit l'adresse doit voir le fichier : pour la prod, celle connectée en Remote-SSH au serveur.
+
 ## Grammaire
 
 `syntaxes/rathena.json` est généré depuis `scripts/grammar-skeleton.json` et les sources du serveur : les commandes déclarées par `BUILDIN_DEF`, les paramètres et constantes de `script_constants.hpp`, et les cartes de `db/map_index.txt`. Après un ajout côté serveur :

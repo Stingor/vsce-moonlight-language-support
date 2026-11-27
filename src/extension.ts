@@ -8,6 +8,7 @@ import { registerEncodingGuard } from './encoding'
 import { registerNavigation } from './navigation'
 import { registerReloadCommand } from './reloadCommand'
 import { registerIdHover } from './idHoverProvider'
+import { registerSpokenLineHandler } from './uriHandler'
 
 const DEFAULT_WRAP_HEX = 'ff0000'
 const RESET_CODE = '^000000'
@@ -30,6 +31,7 @@ export function activate (context: vscode.ExtensionContext): void {
   registerNavigation(context)
   registerReloadCommand(context)
   registerIdHover(context)
+  registerSpokenLineHandler(context)
   context.subscriptions.push(
     vscode.commands.registerTextEditorCommand('rathena.wrapWithColorCodes', wrapWithColorCodes)
   )

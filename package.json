@@ -30,7 +30,7 @@
     "bugs": {
         "url": "https://github.com/Stingor/vsce-moonlight-language-support/issues"
     },
-    "version": "1.3.0",
+    "version": "1.4.0",
     "engines": {
         "vscode": "^1.120.0"
     },
@@ -39,7 +39,8 @@
         "Snippets"
     ],
     "activationEvents": [
-        "onLanguage:rathena"
+        "onLanguage:rathena",
+        "onUri"
     ],
     "main": "./out/extension",
     "contributes": {
