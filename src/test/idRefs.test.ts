@@ -73,6 +73,17 @@ describe('idSlotAt', () => {
   })
 })
 
+describe('numéros de quête', () => {
+  it('reconnaît les six commandes, les deux numéros de changequest, pas son personnage', () => {
+    const text = '\tsetquest 12072;\n\tif (checkquest(12073,HUNTING) == 2) completequest 12074;\n' +
+      '\tchangequest 12075,12076,.@cid;\n\terasequest 12077;\n\tif (isbegin_quest(12078) == 1) end;\n\tsetquest .@quete;'
+    const { blank, regions } = parts(text)
+    const refs = allRefs(text, blank, regions)
+    assert.deepEqual(refs.map(ref => [ref.kind, ref.id ?? ref.constant]),
+      [12072, 12073, 12074, 12075, 12076, 12077, 12078].map(id => ['quest', id]))
+  })
+})
+
 describe('constantes en argument', () => {
   it('reconnaît getitem Red_Potion et MOB_PORING, pas un appel ni une quantité', () => {
     const text = '\tgetitem Red_Potion,1;\n\tmonster "prt",1,1,"x",MOB_PORING,1;\n\tgetitem getarg(0),Nombre;'

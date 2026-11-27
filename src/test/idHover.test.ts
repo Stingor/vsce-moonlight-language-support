@@ -102,6 +102,16 @@ describe('loadDbTable', () => {
   })
 })
 
+describe('table des quêtes', () => {
+  it('lit le titre d\'une quête comme son nom, sans le confondre avec ses cibles', () => {
+    const file = readDbFile(['Body:', '  - Id: 12072', '    Title: Hunt tharafrog', '    Targets:',
+      '      - Mob: THARA_FROG', '        Count: 20'].join('\n'))
+    assert.deepEqual(file.entries, [{ id: 12072, line: 1, name: 'Hunt tharafrog' }])
+    assert.deepEqual(describeEntry('quest', { id: 12072, aegis: '', name: 'Hunt tharafrog' }),
+      { name: 'Hunt tharafrog', detail: ' — quête 12072' })
+  })
+})
+
 describe('isRenewal', () => {
   it('lit le #define RENEWAL actif, pas commenté', () => {
     assert.equal(isRenewal('// #define RENEWAL - LE SERVEUR EST PRE-RENEWAL\n#define RENEWAL_CAST'), false)

@@ -40,7 +40,8 @@ function constantAt (blank: string, offset: number): IdRef | undefined {
   // Un appel ou un tableau n'est pas une constante.
   if (/^\s*[([]/.test(blank.slice(end, end + 8))) return undefined
   const kind = idArgumentKind(blank, start, end)
-  return kind !== undefined ? { kind, constant: name, start, end } : undefined
+  // Une quête n'a pas de constante : un mot à sa place est une variable.
+  return kind !== undefined && kind !== 'quest' ? { kind, constant: name, start, end } : undefined
 }
 
 const TEXT_TAGS: Array<{ kind: IdKind, pattern: RegExp }> = [

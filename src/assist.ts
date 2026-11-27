@@ -70,6 +70,30 @@ export function registerAssist (context: vscode.ExtensionContext, index: Workspa
       }
     }, ' ', ',', '('),
 
+    // ── LE SURVOL D'UNE COMMANDE : la même documentation que la signature ──
+    vscode.languages.registerHoverProvider({ language: 'rathena' }, {
+      async provideHover (doc, position) {
+        if (!isRathena(doc)) return undefined
+        const { blank, analysis } = partsOf(doc)
+        const range = doc.getWordRangeAtPosition(position, /[A-Za-z_][A-Za-z0-9_]*/)
+        if (range === undefined) return undefined
+        const start = doc.offsetAt(range.start)
+        // Hors des chaînes et des commentaires, et pas une variable (`.@getitem`).
+        if (blank[start] === ' ' || (start > 0 && /[.@$'#]/.test(blank[start - 1]))) return undefined
+        const word = doc.getText(range)
+        // Une étiquette ou une fonction locale du même nom passe devant.
+        const script = analysis.script()
+        const lower = word.toLowerCase()
+        if ([...script.labels, ...script.localFunctions].some(item => item.name.toLowerCase() === lower)) return undefined
+        const command = (await docsFor(doc))?.get(lower)
+        if (command === undefined) return undefined
+        const shown = new vscode.MarkdownString()
+        shown.appendCodeblock(command.signatures.map(signature => signature.text).join('\n'), 'rathena')
+        if (command.summary !== '') shown.appendText(command.summary)
+        return new vscode.Hover(shown, range)
+      }
+    }),
+
     // ── LA COMPLÉTION ───────────────────────────────────────────────────────
     vscode.languages.registerCompletionItemProvider({ language: 'rathena' }, {
       async provideCompletionItems (doc, position) {

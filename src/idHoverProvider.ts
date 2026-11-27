@@ -19,7 +19,7 @@ import {
 import { blankRegions } from './scriptChecks'
 import { readText, serverRoot } from './serverFiles'
 
-const TABLES: Record<IdKind, string> = { item: 'db/item_db.yml', mob: 'db/mob_db.yml' }
+const TABLES: Record<IdKind, string> = { item: 'db/item_db.yml', mob: 'db/mob_db.yml', quest: 'db/quest_db.yml' }
 const RENEWAL_HEADER = 'src/config/renewal.hpp'
 const UPDATE_DELAY_MS = 500
 
@@ -40,6 +40,7 @@ interface Tables {
   root: vscode.Uri
   item: Table
   mob: Table
+  quest: Table
   // Les constantes déjà posées quand les tables arrivent : un nom Aegis qui
   // les heurte n'obtient pas la sienne.
   reserved: Set<string>
@@ -78,7 +79,7 @@ async function loadTables (root: vscode.Uri): Promise<Tables> {
     for (const entry of byId.values()) if (entry.aegis !== '') byAegis.set(entry.aegis.toLowerCase(), entry)
     return { byId, byAegis, shared: sharedAegisNames(byId.values()) }
   }
-  return { root, item: await load('item'), mob: await load('mob'), reserved: await loadReserved(root) }
+  return { root, item: await load('item'), mob: await load('mob'), quest: await load('quest'), reserved: await loadReserved(root) }
 }
 
 function entryOf (tables: Tables, ref: IdRef): DbEntry | undefined {
@@ -99,7 +100,7 @@ function isReportable (ref: IdRef): boolean {
 }
 
 function whatOf (ref: IdRef): string {
-  const noun = ref.kind === 'item' ? 'objet' : 'monstre'
+  const noun = ref.kind === 'item' ? 'objet' : ref.kind === 'mob' ? 'monstre' : 'quête'
   return ref.id !== undefined ? `${noun} ${ref.id}` : `${noun} « ${ref.constant ?? ref.aegis ?? ''} »`
 }
 
@@ -137,7 +138,7 @@ export function registerIdHover (context: vscode.ExtensionContext): void {
       if (entryOf(tables, ref) !== undefined || !isReportable(ref)) continue
       const range = new vscode.Range(doc.positionAt(ref.start), doc.positionAt(ref.end))
       const diagnostic = new vscode.Diagnostic(range,
-        `${whatOf(ref)[0].toUpperCase()}${whatOf(ref).slice(1)} absent des tables que charge le serveur.`,
+        `${whatOf(ref)[0].toUpperCase()}${whatOf(ref).slice(1)} absent${ref.kind === 'quest' ? 'e' : ''} des tables que charge le serveur.`,
         vscode.DiagnosticSeverity.Warning)
       diagnostic.source = 'moonlight'
       found.push(diagnostic)
@@ -183,7 +184,7 @@ export function registerIdHover (context: vscode.ExtensionContext): void {
         // ⚠ `appendText` : les noms viennent des fichiers, et s'affichent échappés.
         const shown = new vscode.MarkdownString()
         if (entry === undefined) {
-          shown.appendText(`⚠ Aucun ${whatOf(ref)} dans les tables que charge le serveur.`)
+          shown.appendText(`⚠ ${ref.kind === 'quest' ? 'Aucune' : 'Aucun'} ${whatOf(ref)} dans les tables que charge le serveur.`)
         } else {
           const described = describeEntry(ref.kind, entry)
           shown.appendMarkdown('**')
@@ -226,8 +227,8 @@ export function registerIdHover (context: vscode.ExtensionContext): void {
         for (const entry of table.byId.values()) {
           if (slot.quoted && entry.aegis === '') continue
           const name = entry.name !== '' ? entry.name : entry.aegis
-          const item = new vscode.CompletionItem({ label: name, description: `${entry.id} · ${entry.aegis}` },
-            slot.kind === 'item' ? vscode.CompletionItemKind.Value : vscode.CompletionItemKind.Struct)
+          const item = new vscode.CompletionItem({ label: name, description: entry.aegis !== '' ? `${entry.id} · ${entry.aegis}` : String(entry.id) },
+            slot.kind === 'item' ? vscode.CompletionItemKind.Value : slot.kind === 'mob' ? vscode.CompletionItemKind.Struct : vscode.CompletionItemKind.Event)
           item.insertText = insertionFor(slot.kind, entry, slot, prefer, tables.reserved, table.shared)
           // Le nom, le nom Aegis et le nombre : on retrouve une entrée par l'un des trois.
           item.filterText = `${name} ${entry.aegis} ${entry.id}`

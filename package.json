@@ -30,7 +30,7 @@
     "bugs": {
         "url": "https://github.com/Stingor/vsce-moonlight-language-support/issues"
     },
-    "version": "1.7.1",
+    "version": "1.8.0",
     "engines": {
         "vscode": "^1.120.0"
     },

@@ -64,6 +64,7 @@ export function sharedAegisNames (entries: Iterable<DbEntry>): Set<string> {
 // La constante qu'a cette entrée, ou rien.
 export function constantOf (kind: IdKind, entry: DbEntry, reserved: Set<string>, shared: Set<string>): string | undefined {
   if (entry.aegis === '' || shared.has(entry.aegis.toLowerCase())) return undefined
+  if (kind === 'quest') return undefined
   const name = kind === 'item' ? entry.aegis : `MOB_${entry.aegis}`
   if (!IDENTIFIER.test(name) || reserved.has(name.toLowerCase())) return undefined
   return name

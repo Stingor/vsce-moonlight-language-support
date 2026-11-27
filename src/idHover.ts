@@ -8,7 +8,7 @@
 // tombent souvent sur un identifiant existant : nommer tout nombre qui en a
 // l'air mentirait plus souvent qu'il n'aiderait.
 
-export type IdKind = 'item' | 'mob'
+export type IdKind = 'item' | 'mob' | 'quest'
 
 // Le fichier et la ligne (à partir de 0) d'un `- Id:`.
 export interface DbSource {
@@ -95,11 +95,11 @@ export function readDbFile (text: string): DbFile {
         continue
       }
       if (current === undefined) continue
-      const key = /^(\s*)(AegisName|Name|Level):\s*(.*)$/.exec(line)
+      const key = /^(\s*)(AegisName|Name|Title|Level):\s*(.*)$/.exec(line)
       if (key === null || key[1].length !== keyIndent) continue
       const value = key[3].replace(/^"(.*)"$/, '$1')
       if (key[2] === 'AegisName') current.aegis = value
-      else if (key[2] === 'Name') current.name = value
+      else if (key[2] === 'Name' || key[2] === 'Title') current.name = value
       else current.level = Number(value)
     } else if (section === 'Footer') {
       const path = /^\s*-\s*Path:\s*(\S+)$/.exec(line)
@@ -168,7 +168,7 @@ export async function loadDbTable (first: string, read: ReadFile, renewal: boole
 // ⚠ PAS CELLES QUI NE LISENT QU'UN NUMÉRO : un nom y casserait le script.
 export interface IdArgument { kind: IdKind, byName: boolean }
 
-const ID_ARGUMENTS = new Map<string, IdArgument & { arg: number | 'any' }>([
+const ID_ARGUMENTS = new Map<string, IdArgument & { arg: number | number[] | 'any' }>([
   ...['getitem', 'getitem2', 'getitem3', 'getitembound', 'getitembound2', 'rentitem', 'rentitem2',
     'delitem', 'delitem2', 'delitem3', 'countitem', 'countitem2', 'countitem3', 'cartcountitem',
     'storagecountitem', 'guildstoragecountitem', 'checkweight', 'getitemname', 'getiteminfo',
@@ -181,7 +181,11 @@ const ID_ARGUMENTS = new Map<string, IdArgument & { arg: number | 'any' }>([
   ['areamonster', { kind: 'mob', arg: 6, byName: true }],
   ['getmonsterinfo', { kind: 'mob', arg: 0, byName: true }],
   ['getmobdrops', { kind: 'mob', arg: 0, byName: false }],
-  ['strmobinfo', { kind: 'mob', arg: 1, byName: false }]
+  ['strmobinfo', { kind: 'mob', arg: 1, byName: false }],
+  // Une quête n'a ni nom Aegis ni constante : toujours son numéro.
+  ...['setquest', 'completequest', 'erasequest', 'checkquest', 'isbegin_quest']
+    .map(name => [name, { kind: 'quest' as IdKind, arg: 0, byName: false }] as const),
+  ['changequest', { kind: 'quest', arg: [0, 1], byName: false }]
 ])
 
 export interface IdAtCursor {
@@ -217,8 +221,27 @@ export function argumentContext (blank: string, at: number): { command: string, 
   return depth === 0 ? statementCommand(blank.slice(0, at), commas) : undefined
 }
 
+// La commande d'une instruction. ⚠ UNE CONDITION LA PRÉCÈDE PARFOIS :
+// `if (checkquest(1) == 2) completequest 2;` a pour commande `completequest`,
+// pas `if` — on saute `else`, puis `if`, `while` ou `for` et leurs parenthèses.
 function statementCommand (statement: string, arg: number): { command: string, arg: number } | undefined {
-  const word = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s/.exec(statement)
+  let rest = statement
+  for (;;) {
+    const elseWord = /^\s*else\b/.exec(rest)
+    if (elseWord !== null) { rest = rest.slice(elseWord[0].length); continue }
+    const control = /^\s*(?:if|while|for)\s*\(/.exec(rest)
+    if (control === null) break
+    let depth = 1
+    let at = control[0].length
+    while (at < rest.length && depth > 0) {
+      if (rest[at] === '(') ++depth
+      else if (rest[at] === ')') --depth
+      ++at
+    }
+    if (depth > 0) return undefined
+    rest = rest.slice(at)
+  }
+  const word = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s/.exec(rest)
   return word !== null ? { command: word[1].toLowerCase(), arg } : undefined
 }
 
@@ -262,7 +285,7 @@ export function idArgument (blank: string, start: number, end: number, typing = 
   const context = argumentContext(blank, start)
   if (context === undefined) return undefined
   const rule = ID_ARGUMENTS.get(context.command)
-  if (rule === undefined || (rule.arg !== 'any' && rule.arg !== context.arg)) return undefined
+  if (rule === undefined || !(rule.arg === 'any' || rule.arg === context.arg || (Array.isArray(rule.arg) && rule.arg.includes(context.arg)))) return undefined
   return { kind: rule.kind, byName: rule.byName }
 }
 
@@ -270,6 +293,8 @@ export function idArgument (blank: string, start: number, end: number, typing = 
 // travail, et un nom écrit comme une image ou un lien ne doit rien charger.
 // Le survol les pose par `appendText`, qui échappe tout.
 export function describeEntry (kind: IdKind, entry: DbEntry): { name: string, detail: string } {
+  // Une quête n'a qu'un titre.
+  if (kind === 'quest') return { name: entry.name !== '' ? entry.name : '(sans titre)', detail: ` — quête ${entry.id}` }
   const what = kind === 'item' ? `objet ${entry.id}` : `monstre ${entry.id}${entry.level !== undefined ? `, niveau ${entry.level}` : ''}`
   return {
     name: entry.name !== '' ? entry.name : entry.aegis,

@@ -65,7 +65,9 @@ Sans attendre le serveur (`rathena.checkScripts`) :
 
 Chaque vérification préfère se taire que se tromper : un menu composé à l'exécution n'est pas compté.
 
-## Identifiants d'objets et de monstres
+## Identifiants d'objets, de monstres et de quêtes
+
+Une quête se reconnaît par son numéro dans `setquest`, `completequest`, `erasequest`, `checkquest`, `isbegin_quest` et les deux premiers arguments de `changequest`. Son titre vient de `db/quest_db.yml` et de ses imports. Le survol, F12, la complétion par le titre et le signalement d'une quête inconnue fonctionnent comme pour un objet. Une quête n'a pas de constante : la complétion insère toujours son numéro.
 
 Un objet ou un monstre se reconnaît sous quatre formes :
 
@@ -108,6 +110,7 @@ La fenêtre qui reçoit l'adresse doit voir le fichier : pour la prod, celle con
 ## Écrire
 
 - **Signature** : pendant qu'on tape une commande, ses écritures et ses paramètres s'affichent, celui qu'on remplit en gras, avec le premier paragraphe de son explication — lus dans `doc/script_commands.txt` du serveur ouvert.
+- **Survol d'une commande** : la même documentation — ses écritures et son explication — en survolant `getitem`, `mes`, `warp`… Une étiquette ou une fonction locale du même nom passe devant.
 - **Complétion** :
   - en début d'instruction, les commandes, avec leur signature ;
   - après `goto` ou `callsub`, les étiquettes du PNJ ;
