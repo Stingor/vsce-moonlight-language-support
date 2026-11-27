@@ -6,6 +6,8 @@ import { registerColorDecorations } from './colorDecorations'
 import { registerDiagnostics } from './diagnostics'
 import { registerEncodingGuard } from './encoding'
 import { registerNavigation } from './navigation'
+import { registerReloadCommand } from './reloadCommand'
+import { registerIdHover } from './idHoverProvider'
 
 const DEFAULT_WRAP_HEX = 'ff0000'
 const RESET_CODE = '^000000'
@@ -26,6 +28,8 @@ export function activate (context: vscode.ExtensionContext): void {
   registerDiagnostics(context)
   registerColorDecorations(context)
   registerNavigation(context)
+  registerReloadCommand(context)
+  registerIdHover(context)
   context.subscriptions.push(
     vscode.commands.registerTextEditorCommand('rathena.wrapWithColorCodes', wrapWithColorCodes)
   )

@@ -41,6 +41,34 @@ Les scripts sont en Windows-1252, avec des îlots CP949 (noms de fichiers de la 
   L'index couvre les `.npc` de l'espace de travail et les `.txt` des dossiers `npc/`.
 - Le double-clic sélectionne une variable entière, préfixe compris : `.@var$`, `$@var`, `##var`, `'var`.
 
+## Recharger sur le serveur
+
+`Ctrl+Alt+R`, le bouton ⟳ de la barre de l'éditeur ou le menu contextuel : **Recharger ce script sur le serveur**. Le fichier est enregistré, puis rechargé par le canal d'administration du map-server (`@reloadnpcfile`). Ce que la console du serveur dit du fichier pendant le rechargement — erreurs de script, avertissements — se pose sur ses lignes, dans l'onglet Problèmes ; le reste est ignoré. Le compte rendu complet est dans la sortie « Moonlight — serveur ».
+
+- Sous Remote-SSH, l'extension tourne sur la machine du serveur : elle joint le canal en `127.0.0.1`, et lit le port et le secret dans `conf/admin.conf` et ses imports. `admin_allow` doit laisser passer `127.0.0.1`.
+- Un secret enregistré en MD5 (`admin_secret_md5: yes`) ne sert pas à se présenter : le vrai se pose dans `rathena.reload.secret`.
+- Seuls les scripts de `moon/` se rechargent : ce sont les seuls que le serveur charge.
+
+| Réglage | Effet |
+|---|---|
+| `rathena.reload.onSave` | Recharger à chaque enregistrement |
+| `rathena.reload.host` | L'hôte du canal (`127.0.0.1`) |
+| `rathena.reload.secret` | Le secret, s'il ne se lit pas dans la conf |
+
+## Vérifications pendant la frappe
+
+Sans attendre le serveur (`rathena.checkScripts`) :
+
+- les accolades d'un PNJ qui ne s'équilibrent pas ;
+- une étiquette appelée par `goto` ou `callsub` qui n'existe pas dans le même PNJ ;
+- un `case N` qu'un `switch (select("…"))` ne peut pas choisir, faute d'autant d'options.
+
+Chaque vérification préfère se taire que se tromper : un menu composé à l'exécution n'est pas compté.
+
+## Survol des identifiants
+
+Survoler l'identifiant d'un objet ou d'un monstre donne son nom, son nom Aegis et, pour un monstre, son niveau — lus dans les tables que charge le serveur ouvert (`db/item_db.yml`, `db/mob_db.yml` et leurs imports actifs). Un identifiant absent de ces tables le dit. Le nombre n'est nommé que par la commande qui le lit (`getitem`, `countitem`, `delitem`, `monster`, `areamonster`…) et s'il est l'argument entier.
+
 ## Grammaire
 
 `syntaxes/rathena.json` est généré depuis `scripts/grammar-skeleton.json` et les sources du serveur : les commandes déclarées par `BUILDIN_DEF`, les paramètres et constantes de `script_constants.hpp`, et les cartes de `db/map_index.txt`. Après un ajout côté serveur :

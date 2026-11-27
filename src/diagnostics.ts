@@ -6,6 +6,7 @@
 
 import * as vscode from 'vscode'
 import { analyze, isRathena } from './documentCache'
+import { checkScript } from './scriptChecks'
 
 export const REPLACEMENT_CHAR = '�'
 // Au-delà, le fichier est perdu dans son ensemble : la liste n'apprend plus rien.
@@ -34,7 +35,17 @@ function compute (doc: vscode.TextDocument): vscode.Diagnostic[] {
     diagnostic.source = 'moonlight'
     diagnostics.push(diagnostic)
   }
-  for (const code of analyze(doc).colors.malformed) {
+  const analysis = analyze(doc)
+  if (vscode.workspace.getConfiguration('rathena').get<boolean>('checkScripts', true)) {
+    for (const problem of checkScript(text, analysis.regions, analysis.script())) {
+      const range = new vscode.Range(doc.positionAt(problem.start), doc.positionAt(problem.end))
+      const diagnostic = new vscode.Diagnostic(range, problem.message,
+        problem.severity === 'error' ? vscode.DiagnosticSeverity.Error : vscode.DiagnosticSeverity.Warning)
+      diagnostic.source = 'moonlight'
+      diagnostics.push(diagnostic)
+    }
+  }
+  for (const code of analysis.colors.malformed) {
     const range = new vscode.Range(doc.positionAt(code.start), doc.positionAt(code.end))
     const diagnostic = new vscode.Diagnostic(range,
       'Code couleur incomplet : il faut six chiffres hexadécimaux après « ^ », ' +
