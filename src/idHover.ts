@@ -10,18 +10,29 @@
 
 export type IdKind = 'item' | 'mob'
 
+// Le fichier et la ligne (à partir de 0) d'un `- Id:`.
+export interface DbSource {
+  path: string
+  line: number
+}
+
 export interface DbEntry {
   id: number
   aegis: string
   name: string
   // Les monstres seulement.
   level?: number
+  // Le DERNIER fichier qui l'a écrit : celui dont la valeur l'emporte, donc
+  // celui où la corriger.
+  source?: DbSource
 }
 
 // Une entrée telle qu'un fichier l'écrit : un import peut ne réécrire que
 // certains champs d'une entrée déjà lue.
 export interface DbEntryFields {
   id: number
+  // La ligne de son `- Id:`, à partir de 0.
+  line: number
   aegis?: string
   name?: string
   level?: number
@@ -61,8 +72,9 @@ export function readDbFile (text: string): DbFile {
   let current: DbEntryFields | undefined
   let keyIndent = -1
   let imported: DbImport | undefined
-  for (const raw of text.split(/\r?\n/)) {
-    const line = yamlLine(raw)
+  const lines = text.split(/\r?\n/)
+  for (let index = 0; index < lines.length; ++index) {
+    const line = yamlLine(lines[index])
     if (line === '') continue
     const top = /^([A-Za-z]+):\s*$/.exec(line)
     if (top !== null) {
@@ -77,7 +89,7 @@ export function readDbFile (text: string): DbFile {
     } else if (section === 'Body') {
       const start = /^(\s*)-\s+Id:\s*(\d+)$/.exec(line)
       if (start !== null) {
-        current = { id: Number(start[2]) }
+        current = { id: Number(start[2]), line: index }
         keyIndent = start[1].length + 2
         file.entries.push(current)
         continue
@@ -136,6 +148,7 @@ export async function loadDbTable (first: string, read: ReadFile, renewal: boole
       if (fields.aegis !== undefined) entry.aegis = fields.aegis
       if (fields.name !== undefined) entry.name = fields.name
       if (fields.level !== undefined) entry.level = fields.level
+      entry.source = { path: relative, line: fields.line }
       table.set(fields.id, entry)
     }
     for (const imported of file.imports) {
@@ -213,19 +226,32 @@ export function idAt (blank: string, offset: number): IdAtCursor | undefined {
   // Un chiffre dans un nom (`.@var2`, `L_3`) ou un nombre décimal n'en est pas un.
   if (start > 0 && (IDENT.test(blank[start - 1]) || blank[start - 1] === '.' || blank[start - 1] === '@')) return undefined
   if (IDENT.test(blank[end] ?? '')) return undefined
-  // ⚠ LE NOMBRE EST L'ARGUMENT ENTIER : dans `.@base+1` ou `.@liste[1]`, il
-  // n'est qu'un morceau d'expression, et le nommer serait faux.
+  const kind = idArgumentKind(blank, start, end)
+  return kind !== undefined ? { kind, id: Number(blank.slice(start, end)), start, end } : undefined
+}
+
+// CE QUE LIT L'ARGUMENT `[start, end)` : un objet, un monstre, ou rien.
+//
+// ⚠ IL FAUT ÊTRE L'ARGUMENT ENTIER : dans `.@base+1` ou `.@liste[1]`, un
+// nombre n'est qu'un morceau d'expression, et le nommer serait faux. Vaut
+// pour un nombre, une chaîne (un nom Aegis) ou un mot en cours de frappe.
+//
+// `typing` : l'instruction s'écrit encore, et peut ne pas être fermée.
+export function idArgumentKind (blank: string, start: number, end: number, typing = false): IdKind | undefined {
   let before = start - 1
   while (before >= 0 && /\s/.test(blank[before])) --before
+  // Une instruction écrite se ferme plus loin, même après un saut de ligne ;
+  // une instruction en cours de frappe peut s'arrêter à la fin de la ligne.
   let after = end
-  while (after < blank.length && /\s/.test(blank[after])) ++after
-  if (!/[,;)]/.test(blank[after] ?? ';')) return undefined
+  const space = typing ? /[ \t]/ : /\s/
+  while (after < blank.length && space.test(blank[after])) ++after
+  if (!(typing ? /[,;)\r\n]/ : /[,;)]/).test(blank[after] ?? ';')) return undefined
   if (before >= 0 && !/[,(]/.test(blank[before]) && !(IDENT.test(blank[before]) && before < start - 1)) return undefined
   const context = argumentContext(blank, start)
   if (context === undefined) return undefined
   const rule = ID_ARGUMENTS.get(context.command)
   if (rule === undefined || (rule.arg !== 'any' && rule.arg !== context.arg)) return undefined
-  return { kind: rule.kind, id: Number(blank.slice(start, end)), start, end }
+  return rule.kind
 }
 
 // ⚠ DU TEXTE, PAS DU MARKDOWN : les noms viennent des fichiers de l'espace de

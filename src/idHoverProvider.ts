@@ -1,6 +1,8 @@
 'use strict'
 
-// LE SURVOL D'UN IDENTIFIANT D'OBJET OU DE MONSTRE.
+// LES IDENTIFIANTS D'OBJETS ET DE MONSTRES DANS L'ÉDITEUR : survol, aller à la
+// définition, complétion par le nom, et signalement de ceux que le serveur ne
+// connaît pas.
 //
 // Les tables sont celles que charge le serveur ouvert, comme il les charge
 // (`loadDbTable`) : `db/item_db.yml` et `db/mob_db.yml`, leurs imports en
@@ -9,14 +11,22 @@
 
 import * as vscode from 'vscode'
 import { analyze, isRathena } from './documentCache'
-import { type DbEntry, type IdKind, describeEntry, idAt, isRenewal, loadDbTable } from './idHover'
+import { type DbEntry, type IdKind, describeEntry, isRenewal, loadDbTable } from './idHover'
+import { type IdRef, allRefs, idSlotAt, refAt } from './idRefs'
 import { blankRegions } from './scriptChecks'
 import { readText, serverRoot } from './serverFiles'
 
 const TABLES: Record<IdKind, string> = { item: 'db/item_db.yml', mob: 'db/mob_db.yml' }
 const RENEWAL_HEADER = 'src/config/renewal.hpp'
+const UPDATE_DELAY_MS = 500
 
-type Table = Map<number, DbEntry>
+interface Table {
+  byId: Map<number, DbEntry>
+  // ⚠ SANS CASSE : le serveur retrouve un nom Aegis sans tenir compte de la casse.
+  byAegis: Map<string, DbEntry>
+}
+
+interface Tables { root: vscode.Uri, item: Table, mob: Table }
 
 async function readOrNothing (root: vscode.Uri, relative: string): Promise<string | undefined> {
   try {
@@ -26,46 +36,156 @@ async function readOrNothing (root: vscode.Uri, relative: string): Promise<strin
   }
 }
 
-async function loadTable (root: vscode.Uri, kind: IdKind): Promise<Table> {
+async function loadTables (root: vscode.Uri): Promise<Tables> {
   const renewal = isRenewal(await readOrNothing(root, RENEWAL_HEADER))
-  return await loadDbTable(TABLES[kind], async relative => await readOrNothing(root, relative), renewal)
+  const load = async (kind: IdKind): Promise<Table> => {
+    const byId = await loadDbTable(TABLES[kind], async relative => await readOrNothing(root, relative), renewal)
+    const byAegis = new Map<string, DbEntry>()
+    for (const entry of byId.values()) if (entry.aegis !== '') byAegis.set(entry.aegis.toLowerCase(), entry)
+    return { byId, byAegis }
+  }
+  return { root, item: await load('item'), mob: await load('mob') }
+}
+
+function entryOf (tables: Tables, ref: IdRef): DbEntry | undefined {
+  const table = tables[ref.kind]
+  return ref.id !== undefined ? table.byId.get(ref.id) : table.byAegis.get((ref.aegis ?? '').toLowerCase())
+}
+
+function whatOf (ref: IdRef): string {
+  const noun = ref.kind === 'item' ? 'objet' : 'monstre'
+  return ref.id !== undefined ? `${noun} ${ref.id}` : `${noun} « ${ref.aegis ?? ''} »`
 }
 
 export function registerIdHover (context: vscode.ExtensionContext): void {
-  const tables = new Map<string, Promise<Table>>()
-  const tableOf = async (root: vscode.Uri, kind: IdKind): Promise<Table> => {
-    const key = `${root.toString()}|${kind}`
-    let table = tables.get(key)
-    if (table === undefined) tables.set(key, table = loadTable(root, kind))
-    return await table
+  const cache = new Map<string, Promise<Tables>>()
+  const diagnostics = vscode.languages.createDiagnosticCollection('moonlight-identifiants')
+  const pending = new Map<string, NodeJS.Timeout>()
+
+  const tablesFor = async (doc: vscode.TextDocument): Promise<Tables | undefined> => {
+    const root = await serverRoot(doc.uri, TABLES.item)
+    if (root === undefined) return undefined
+    const key = root.toString()
+    let tables = cache.get(key)
+    if (tables === undefined) cache.set(key, tables = loadTables(root))
+    return await tables
+  }
+  const refsOf = (doc: vscode.TextDocument): { text: string, blank: string, regions: ReturnType<typeof analyze>['regions'] } => {
+    const analysis = analyze(doc)
+    const text = doc.getText()
+    return { text, blank: blankRegions(text, analysis.regions), regions: analysis.regions }
   }
 
+  // ── LES INCONNUS ──────────────────────────────────────────────────────────
+  const check = async (doc: vscode.TextDocument): Promise<void> => {
+    if (!isRathena(doc) || !vscode.workspace.getConfiguration('rathena').get<boolean>('checkScripts', true)) {
+      diagnostics.delete(doc.uri)
+      return
+    }
+    const tables = await tablesFor(doc)
+    if (tables === undefined) return
+    const version = doc.version
+    const { text, blank, regions } = refsOf(doc)
+    const found: vscode.Diagnostic[] = []
+    for (const ref of allRefs(text, blank, regions)) {
+      if (entryOf(tables, ref) !== undefined) continue
+      const range = new vscode.Range(doc.positionAt(ref.start), doc.positionAt(ref.end))
+      const diagnostic = new vscode.Diagnostic(range,
+        `${whatOf(ref)[0].toUpperCase()}${whatOf(ref).slice(1)} absent des tables que charge le serveur.`,
+        vscode.DiagnosticSeverity.Warning)
+      diagnostic.source = 'moonlight'
+      found.push(diagnostic)
+    }
+    // Une frappe arrivée pendant la lecture des tables a déjà relancé la vérification.
+    if (doc.version === version) diagnostics.set(doc.uri, found)
+  }
+  const checkLater = (doc: vscode.TextDocument): void => {
+    const key = doc.uri.toString()
+    const timer = pending.get(key)
+    if (timer !== undefined) clearTimeout(timer)
+    pending.set(key, setTimeout(() => {
+      pending.delete(key)
+      void check(doc)
+    }, UPDATE_DELAY_MS))
+  }
+  const recheckAll = (): void => { vscode.workspace.textDocuments.forEach(checkLater) }
+
   const watcher = vscode.workspace.createFileSystemWatcher('**/{db/**/*.yml,src/config/renewal.hpp}')
-  const forget = (): void => { tables.clear() }
+  const forget = (): void => {
+    cache.clear()
+    recheckAll()
+  }
+
   context.subscriptions.push(
-    watcher, watcher.onDidChange(forget), watcher.onDidCreate(forget), watcher.onDidDelete(forget),
+    diagnostics, watcher, watcher.onDidChange(forget), watcher.onDidCreate(forget), watcher.onDidDelete(forget),
+    vscode.workspace.onDidOpenTextDocument(checkLater),
+    vscode.workspace.onDidChangeTextDocument(event => { checkLater(event.document) }),
+    vscode.workspace.onDidCloseTextDocument(doc => { diagnostics.delete(doc.uri) }),
+    vscode.workspace.onDidChangeConfiguration(event => { if (event.affectsConfiguration('rathena.checkScripts')) recheckAll() }),
+    { dispose: () => { pending.forEach(timer => { clearTimeout(timer) }) } },
+
+    // ── LE SURVOL ───────────────────────────────────────────────────────────
     vscode.languages.registerHoverProvider({ language: 'rathena' }, {
       async provideHover (doc, position) {
-        if (!isRathena(doc)) return undefined
-        const analysis = analyze(doc)
-        const id = idAt(blankRegions(doc.getText(), analysis.regions), doc.offsetAt(position))
-        if (id === undefined) return undefined
-        const root = await serverRoot(doc.uri, TABLES[id.kind])
-        if (root === undefined) return undefined
-        const entry = (await tableOf(root, id.kind)).get(id.id)
-        const range = new vscode.Range(doc.positionAt(id.start), doc.positionAt(id.end))
-        const text = new vscode.MarkdownString()
+        const { text, blank, regions } = refsOf(doc)
+        const ref = refAt(text, blank, regions, doc.offsetAt(position))
+        if (ref === undefined) return undefined
+        const tables = await tablesFor(doc)
+        if (tables === undefined) return undefined
+        const entry = entryOf(tables, ref)
+        const range = new vscode.Range(doc.positionAt(ref.start), doc.positionAt(ref.end))
+        // ⚠ `appendText` : les noms viennent des fichiers, et s'affichent échappés.
+        const shown = new vscode.MarkdownString()
         if (entry === undefined) {
-          text.appendText(`⚠ Aucun ${id.kind === 'item' ? 'objet' : 'monstre'} ${id.id} dans les tables que charge le serveur.`)
+          shown.appendText(`⚠ Aucun ${whatOf(ref)} dans les tables que charge le serveur.`)
         } else {
-          const described = describeEntry(id.kind, entry)
-          text.appendMarkdown('**')
-          text.appendText(described.name)
-          text.appendMarkdown('**')
-          text.appendText(described.detail)
+          const described = describeEntry(ref.kind, entry)
+          shown.appendMarkdown('**')
+          shown.appendText(described.name)
+          shown.appendMarkdown('**')
+          shown.appendText(described.detail)
+          if (entry.source !== undefined) shown.appendText(`\n\n${entry.source.path}:${entry.source.line + 1}`)
         }
-        return new vscode.Hover(text, range)
+        return new vscode.Hover(shown, range)
+      }
+    }),
+
+    // ── ALLER À LA DÉFINITION : l'entrée du dernier fichier qui l'a écrite ──
+    vscode.languages.registerDefinitionProvider({ language: 'rathena' }, {
+      async provideDefinition (doc, position) {
+        const { text, blank, regions } = refsOf(doc)
+        const ref = refAt(text, blank, regions, doc.offsetAt(position))
+        if (ref === undefined) return undefined
+        const tables = await tablesFor(doc)
+        const source = tables !== undefined ? entryOf(tables, ref)?.source : undefined
+        if (tables === undefined || source === undefined) return undefined
+        return new vscode.Location(vscode.Uri.joinPath(tables.root, source.path), new vscode.Position(source.line, 0))
+      }
+    }),
+
+    // ── LA COMPLÉTION PAR LE NOM ────────────────────────────────────────────
+    vscode.languages.registerCompletionItemProvider({ language: 'rathena' }, {
+      async provideCompletionItems (doc, position) {
+        const { blank } = refsOf(doc)
+        const slot = idSlotAt(blank, doc.offsetAt(position))
+        if (slot === undefined) return undefined
+        const tables = await tablesFor(doc)
+        if (tables === undefined) return undefined
+        const range = new vscode.Range(doc.positionAt(slot.start), doc.positionAt(slot.end))
+        const items: vscode.CompletionItem[] = []
+        for (const entry of tables[slot.kind].byId.values()) {
+          const name = entry.name !== '' ? entry.name : entry.aegis
+          const item = new vscode.CompletionItem({ label: name, description: `${entry.id} · ${entry.aegis}` },
+            slot.kind === 'item' ? vscode.CompletionItemKind.Value : vscode.CompletionItemKind.Struct)
+          item.insertText = String(entry.id)
+          // Le nom, le nom Aegis et le nombre : on retrouve une entrée par l'un des trois.
+          item.filterText = `${name} ${entry.aegis} ${entry.id}`
+          item.range = range
+          items.push(item)
+        }
+        return new vscode.CompletionList(items, false)
       }
     })
   )
+  vscode.workspace.textDocuments.forEach(checkLater)
 }

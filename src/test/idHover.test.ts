@@ -39,8 +39,8 @@ describe('readDbFile', () => {
       '    Name: "Carte #1"'
     ]))
     assert.deepEqual(file.entries, [
-      { id: 1002, aegis: 'PORING', name: 'Poring', level: 1 },
-      { id: 501, aegis: 'Red_Potion', name: 'Carte #1' }
+      { id: 1002, line: 4, aegis: 'PORING', name: 'Poring', level: 1 },
+      { id: 501, line: 11, aegis: 'Red_Potion', name: 'Carte #1' }
     ])
   })
 
@@ -73,7 +73,7 @@ describe('loadDbTable', () => {
     })
     const entry = (await loadDbTable('a', read, false)).get(1)
     // c, lu en dernier, gagne ; le champ qu'aucun import ne réécrit reste.
-    assert.deepEqual(entry, { id: 1, aegis: 'A', name: 'depuis c' })
+    assert.deepEqual(entry, { id: 1, aegis: 'A', name: 'depuis c', source: { path: 'c', line: 4 } })
   })
 
   it('suit le mode compilé, saute le générateur, et obéit à Clear', async () => {

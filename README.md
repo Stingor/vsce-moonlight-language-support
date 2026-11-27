@@ -65,9 +65,23 @@ Sans attendre le serveur (`rathena.checkScripts`) :
 
 Chaque vérification préfère se taire que se tromper : un menu composé à l'exécution n'est pas compté.
 
-## Survol des identifiants
+## Identifiants d'objets et de monstres
 
-Survoler l'identifiant d'un objet ou d'un monstre donne son nom, son nom Aegis et, pour un monstre, son niveau — lus dans les tables que charge le serveur ouvert, comme il les charge : `db/item_db.yml` et `db/mob_db.yml`, puis chaque import du `Footer` chargé en entier, ses propres imports compris, avant le suivant ; un import dont le `Mode` n'est pas celui que compile `src/config/renewal.hpp` est sauté, comme un `Generator` ; `Header: Clear` vide la table ; une entrée déjà lue n'est complétée que des champs que l'import réécrit. Un identifiant absent de ces tables le dit. Le nombre n'est nommé que par la commande qui le lit (`getitem`, `countitem`, `delitem`, `monster`, `areamonster`…) et s'il est l'argument entier.
+Un objet ou un monstre se reconnaît sous trois formes :
+
+- un nombre, argument entier d'une commande qui le lit (`getitem 501,1`, `countitem(909)`, `monster …,1002,1`) ;
+- un nom Aegis en chaîne, au même endroit (`getitem "Red_Potion",1`) ;
+- une balise du texte d'un dialogue, que lit le client moonclient : `^i[501]`, `<ITMR>501:nom</ITMR>`, `<ITEM>nom<INFO>501</INFO></ITEM>`, `<MOBL>1002:rang:nom</MOBL>`, `<MOBS>1002</MOBS>`, `<MOBP>1002</MOBP>`.
+
+Sur chacune :
+
+- **le survol** donne son nom, son nom Aegis, le niveau d'un monstre, et le fichier qui l'a défini ;
+- **F12** ouvre son entrée dans le `.yml` qui l'a écrite en dernier — celui dont la valeur l'emporte, donc celui où la corriger ;
+- **un identifiant absent des tables** que charge le serveur est signalé pendant la frappe (`rathena.checkScripts`) : un `getitem` ou un `monster` qui ne donnera rien.
+
+À la place d'un identifiant, **la complétion propose les objets ou les monstres par leur nom** — `red pot` trouve Red Potion, qui s'écrit `501` ; le nom Aegis et le nombre se cherchent aussi.
+
+Les tables sont lues comme le serveur les charge : `db/item_db.yml` et `db/mob_db.yml`, puis chaque import du `Footer` chargé en entier, ses propres imports compris, avant le suivant ; un import dont le `Mode` n'est pas celui que compile `src/config/renewal.hpp` est sauté, comme un `Generator` ; `Header: Clear` vide la table ; une entrée déjà lue n'est complétée que des champs que l'import réécrit.
 
 ## Depuis le jeu
 
