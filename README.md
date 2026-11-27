@@ -46,7 +46,7 @@ Les scripts sont en Windows-1252, avec des îlots CP949 (noms de fichiers de la 
 `Ctrl+Alt+R`, le bouton ⟳ de la barre de l'éditeur ou le menu contextuel : **Recharger ce script sur le serveur**. Le fichier est enregistré, puis rechargé par le canal d'administration du map-server (`@reloadnpcfile`). Ce que la console du serveur dit du fichier pendant le rechargement — erreurs de script, avertissements — se pose sur ses lignes, dans l'onglet Problèmes ; le reste est ignoré. Le compte rendu complet est dans la sortie « Moonlight — serveur ».
 
 - Sous Remote-SSH, l'extension tourne sur la machine du serveur : elle joint le canal en `127.0.0.1`, et lit le port et le secret dans `conf/admin.conf` et ses imports. `admin_allow` doit laisser passer `127.0.0.1`.
-- Un secret enregistré en MD5 (`admin_secret_md5: yes`) ne sert pas à se présenter : le vrai se pose dans `rathena.reload.secret`.
+- Un secret enregistré en MD5 (`admin_secret_md5: yes`) ne sert pas à se présenter : le vrai est demandé au premier rechargement, par une saisie masquée, puis gardé dans le coffre de secrets de VSCode — jamais dans un fichier. Refusé par le serveur, il est oublié et redemandé ; **Oublier le secret du canal d'administration** l'efface.
 - Seuls les scripts de `moon/` se rechargent : ce sont les seuls que le serveur charge.
 
 | Réglage | Effet |

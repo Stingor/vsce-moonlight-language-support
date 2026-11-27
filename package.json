@@ -30,7 +30,7 @@
     "bugs": {
         "url": "https://github.com/Stingor/vsce-moonlight-language-support/issues"
     },
-    "version": "1.4.1",
+    "version": "1.4.2",
     "engines": {
         "vscode": "^1.120.0"
     },
@@ -80,6 +80,11 @@
                 "title": "Recharger ce script sur le serveur",
                 "category": "Moonlight",
                 "icon": "$(refresh)"
+            },
+            {
+                "command": "rathena.forgetReloadSecret",
+                "title": "Oublier le secret du canal d'administration",
+                "category": "Moonlight"
             }
         ],
         "menus": {
@@ -179,7 +184,7 @@
                     "type": "string",
                     "scope": "machine",
                     "default": "",
-                    "description": "Le secret du canal d'administration. Vide : celui de conf/admin.conf et de ses imports (impossible quand admin_secret_md5 est actif).",
+                    "description": "Le secret du canal d'administration, en clair. Mieux vaut le laisser vide : celui de conf/admin.conf s'il y est en clair, sinon il est demandé une fois et gardé dans le coffre de secrets de VSCode.",
                     "order": 12
                 }
             }

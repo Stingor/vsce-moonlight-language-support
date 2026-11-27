@@ -105,7 +105,26 @@ function toDiagnostics (doc: vscode.TextDocument, exchange: Exchange, file: stri
   })
 }
 
-async function reload (doc: vscode.TextDocument, collection: vscode.DiagnosticCollection): Promise<void> {
+// LE SECRET DU CANAL, dans cet ordre : le réglage de la machine ; celui de la
+// conf, s'il est en clair ; sinon le coffre de secrets de VSCode, rempli une
+// fois par une saisie masquée. ⚠ JAMAIS EN CLAIR DANS UN FICHIER quand la conf
+// le garde en MD5 : c'est précisément ce qu'elle protège.
+async function channelSecret (conf: AdminConf, secrets: vscode.SecretStorage, key: string): Promise<string | undefined> {
+  const configured = vscode.workspace.getConfiguration('rathena.reload').get<string>('secret', '')
+  if (configured !== '') return configured
+  if (!conf.secretIsMd5 && conf.secret !== '') return conf.secret
+  const stored = await secrets.get(key)
+  if (stored !== undefined && stored !== '') return stored
+  return await vscode.window.showInputBox({
+    title: 'Secret du canal d\'administration du map-server',
+    prompt: 'La conf ne garde que son empreinte MD5. Il sera rangé dans le coffre de secrets de VSCode, une fois accepté.',
+    password: true,
+    ignoreFocusOut: true
+  })
+}
+
+async function reload (doc: vscode.TextDocument, collection: vscode.DiagnosticCollection,
+  secrets: vscode.SecretStorage): Promise<void> {
   // 🔴 UN DOSSIER NON FIABLE NE RECHARGE RIEN : il pourrait porter une fausse
   // conf, et faire parler le canal d'administration à sa place.
   if (!vscode.workspace.isTrusted) {
@@ -124,18 +143,21 @@ async function reload (doc: vscode.TextDocument, collection: vscode.DiagnosticCo
     return
   }
   const conf = await adminConf(root)
-  const secret = settings.get<string>('secret', '') !== '' ? settings.get<string>('secret', '') : conf.secret
   if (!conf.enabled || conf.port === 0) {
     void vscode.window.showErrorMessage('Le canal d\'administration du map-server est coupé (admin_enable, admin_port).')
     return
   }
-  if (secret === '' || (conf.secretIsMd5 && settings.get<string>('secret', '') === '')) {
-    void vscode.window.showErrorMessage('Le secret du canal d\'administration est une empreinte MD5 : poser le vrai dans « rathena.reload.secret ».')
+  const host = settings.get<string>('host', '127.0.0.1')
+  const secretKey = secretKeyOf(host, conf.port)
+  const secret = await channelSecret(conf, secrets, secretKey)
+  if (secret === undefined || secret === '') return
+  // eslint-disable-next-line no-control-regex
+  if (/[\x00-\x1f]/.test(secret)) {
+    void vscode.window.showErrorMessage('Le secret ne peut pas porter de caractère de contrôle.')
     return
   }
   if (doc.isDirty) await doc.save()
 
-  const host = settings.get<string>('host', '127.0.0.1')
   log(`→ ${host}:${conf.port} reloadnpcfile ${file}`)
   let exchanges: Exchange[]
   try {
@@ -151,9 +173,18 @@ async function reload (doc: vscode.TextDocument, collection: vscode.DiagnosticCo
     for (const line of exchange.lines) log(`  ${line.kind === 'console' ? `[${line.level}] ` : ''}${line.text}`)
     log(`  ${exchange.final.kind.toUpperCase()} ${exchange.final.text}`)
   }
+  // Le premier échange est l'authentification : refusée, un secret gardé est faux.
+  const authenticated = exchanges.length > 0 && exchanges[0].final.kind === 'ok'
+  if (!authenticated) {
+    await secrets.delete(secretKey)
+  } else if (vscode.workspace.getConfiguration('rathena.reload').get<string>('secret', '') === '' &&
+    (conf.secretIsMd5 || conf.secret === '')) {
+    await secrets.store(secretKey, secret)
+  }
   if (exchanges.length < 4 || last.final.kind !== 'ok') {
     collection.delete(doc.uri)
-    void vscode.window.showErrorMessage(`Le serveur a refusé : ${last?.final.text ?? 'connexion fermée'}`)
+    const refused = authenticated ? '' : ' Le secret gardé est oublié : il sera redemandé.'
+    void vscode.window.showErrorMessage(`Le serveur a refusé : ${last?.final.text ?? 'connexion fermée'}.${refused}`)
     return
   }
   const diagnostics = toDiagnostics(doc, last, file)
@@ -169,6 +200,11 @@ async function reload (doc: vscode.TextDocument, collection: vscode.DiagnosticCo
   }
 }
 
+// Un secret par canal : l'hôte et le port le désignent.
+function secretKeyOf (host: string, port: number): string {
+  return `rathena.reload.secret:${host}:${port}`
+}
+
 export function registerReloadCommand (context: vscode.ExtensionContext): void {
   const collection = vscode.languages.createDiagnosticCollection('moonlight-serveur')
   const running = new Set<string>()
@@ -177,7 +213,7 @@ export function registerReloadCommand (context: vscode.ExtensionContext): void {
     if (running.has(key)) return
     running.add(key)
     try {
-      await reload(doc, collection)
+      await reload(doc, collection, context.secrets)
     } finally {
       running.delete(key)
     }
@@ -185,6 +221,13 @@ export function registerReloadCommand (context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     collection,
     vscode.commands.registerTextEditorCommand('rathena.reloadNpcFile', editor => { void run(editor.document) }),
+    vscode.commands.registerCommand('rathena.forgetReloadSecret', async () => {
+      const host = vscode.workspace.getConfiguration('rathena.reload').get<string>('host', '127.0.0.1')
+      const port = await vscode.window.showInputBox({ title: 'Port du canal à oublier', value: '7799' })
+      if (port === undefined) return
+      await context.secrets.delete(secretKeyOf(host, Number.parseInt(port, 10)))
+      void vscode.window.setStatusBarMessage('$(check) Secret du canal oublié.', 5000)
+    }),
     vscode.workspace.onDidSaveTextDocument(doc => {
       if (isRathena(doc) && vscode.workspace.getConfiguration('rathena.reload').get<boolean>('onSave', false)) {
         void run(doc)
