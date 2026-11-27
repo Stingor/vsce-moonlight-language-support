@@ -30,7 +30,7 @@
     "bugs": {
         "url": "https://github.com/Stingor/vsce-moonlight-language-support/issues"
     },
-    "version": "1.6.1",
+    "version": "1.7.0",
     "engines": {
         "vscode": "^1.120.0"
     },
@@ -166,6 +166,17 @@
                     "default": true,
                     "description": "Signaler pendant la frappe les accolades déséquilibrées, les étiquettes introuvables (goto, callsub), les « case » qu'un menu select ne peut pas choisir, et les objets ou monstres absents des tables que charge le serveur.",
                     "order": 5
+                },
+                "rathena.completeIdsAs": {
+                    "type": "string",
+                    "enum": ["constant", "id"],
+                    "enumDescriptions": [
+                        "La constante de script : getitem Red_Potion,1 ; monster …,MOB_PORING,1. Sans constante sûre (nom qui commence par un chiffre, nom déjà pris), le nom en chaîne si la commande l'accepte, sinon le numéro.",
+                        "Le numéro : getitem 501,1"
+                    ],
+                    "default": "constant",
+                    "description": "Ce que la complétion d'un objet ou d'un monstre insère. Entre guillemets, c'est toujours le nom Aegis.",
+                    "order": 6
                 },
                 "rathena.reload.onSave": {
                     "type": "boolean",

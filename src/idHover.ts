@@ -162,19 +162,26 @@ export async function loadDbTable (first: string, read: ReadFile, renewal: boole
 }
 
 // La place de l'identifiant, par commande ; `any` : tout argument en est un.
-const ID_ARGUMENTS = new Map<string, { kind: IdKind, arg: number | 'any' }>([
+//
+// `byName` : la commande accepte aussi le nom Aegis — `getitem "Red_Potion"`,
+// `monster …,"PORING"` —, d'après les signatures de `doc/script_commands.txt`.
+// ⚠ PAS CELLES QUI NE LISENT QU'UN NUMÉRO : un nom y casserait le script.
+export interface IdArgument { kind: IdKind, byName: boolean }
+
+const ID_ARGUMENTS = new Map<string, IdArgument & { arg: number | 'any' }>([
   ...['getitem', 'getitem2', 'getitem3', 'getitembound', 'getitembound2', 'rentitem', 'rentitem2',
     'delitem', 'delitem2', 'delitem3', 'countitem', 'countitem2', 'countitem3', 'cartcountitem',
     'storagecountitem', 'guildstoragecountitem', 'checkweight', 'getitemname', 'getiteminfo',
-    'getnameditem', 'makeitem', 'makeitem2', 'consumeitem', 'setiteminfo', 'itemlink'
-  ].map(name => [name, { kind: 'item' as IdKind, arg: 0 }] as const),
-  ['isequipped', { kind: 'item', arg: 'any' }],
-  ['isequippedcnt', { kind: 'item', arg: 'any' }],
-  ['monster', { kind: 'mob', arg: 4 }],
-  ['areamonster', { kind: 'mob', arg: 6 }],
-  ['getmonsterinfo', { kind: 'mob', arg: 0 }],
-  ['getmobdrops', { kind: 'mob', arg: 0 }],
-  ['strmobinfo', { kind: 'mob', arg: 1 }]
+    'getnameditem', 'makeitem', 'makeitem2', 'consumeitem', 'setiteminfo'
+  ].map(name => [name, { kind: 'item' as IdKind, arg: 0, byName: true }] as const),
+  ['itemlink', { kind: 'item', arg: 0, byName: false }],
+  ['isequipped', { kind: 'item', arg: 'any', byName: false }],
+  ['isequippedcnt', { kind: 'item', arg: 'any', byName: false }],
+  ['monster', { kind: 'mob', arg: 4, byName: true }],
+  ['areamonster', { kind: 'mob', arg: 6, byName: true }],
+  ['getmonsterinfo', { kind: 'mob', arg: 0, byName: true }],
+  ['getmobdrops', { kind: 'mob', arg: 0, byName: false }],
+  ['strmobinfo', { kind: 'mob', arg: 1, byName: false }]
 ])
 
 export interface IdAtCursor {
@@ -238,6 +245,11 @@ export function idAt (blank: string, offset: number): IdAtCursor | undefined {
 //
 // `typing` : l'instruction s'écrit encore, et peut ne pas être fermée.
 export function idArgumentKind (blank: string, start: number, end: number, typing = false): IdKind | undefined {
+  return idArgument(blank, start, end, typing)?.kind
+}
+
+// La même chose, et si la commande accepte un nom Aegis à cette place.
+export function idArgument (blank: string, start: number, end: number, typing = false): IdArgument | undefined {
   let before = start - 1
   while (before >= 0 && /\s/.test(blank[before])) --before
   // Une instruction écrite se ferme plus loin, même après un saut de ligne ;
@@ -251,7 +263,7 @@ export function idArgumentKind (blank: string, start: number, end: number, typin
   if (context === undefined) return undefined
   const rule = ID_ARGUMENTS.get(context.command)
   if (rule === undefined || (rule.arg !== 'any' && rule.arg !== context.arg)) return undefined
-  return rule.kind
+  return { kind: rule.kind, byName: rule.byName }
 }
 
 // ⚠ DU TEXTE, PAS DU MARKDOWN : les noms viennent des fichiers de l'espace de

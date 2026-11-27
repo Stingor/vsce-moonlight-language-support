@@ -46,17 +46,38 @@ describe('allRefs', () => {
 })
 
 describe('idSlotAt', () => {
+  const slot = (text: string, offset: number): ReturnType<typeof idSlotAt> => {
+    const { blank, regions } = parts(text)
+    return idSlotAt(blank, regions, offset)
+  }
+
   it('reconnaît la place d\'un identifiant en cours de frappe', () => {
     const text = '\tgetitem red\n'
-    assert.deepEqual(idSlotAt(parts(text).blank, text.indexOf('red') + 3), { kind: 'item', start: 9, end: 12 })
+    assert.deepEqual(slot(text, text.indexOf('red') + 3), { kind: 'item', byName: true, quoted: false, start: 9, end: 12 })
     const empty = '\tmonster "prt",1,1,"x",'
-    assert.equal(idSlotAt(parts(empty).blank, empty.length)?.kind, 'mob')
+    assert.equal(slot(empty, empty.length)?.kind, 'mob')
+    assert.equal(slot('\tisequipped ', 12)?.byName, false)
+  })
+
+  it('reconnaît le contenu d\'une chaîne là où un nom est accepté', () => {
+    const text = '\tgetitem "red", 1;'
+    assert.deepEqual(slot(text, text.indexOf('red') + 3), { kind: 'item', byName: true, quoted: true, start: 10, end: 13 })
+    assert.equal(slot('\tisequipped "red");', 15), undefined)
   })
 
   it('ne propose rien pour une quantité ou une variable', () => {
     const text = '\tgetitem 501, 3'
-    assert.equal(idSlotAt(parts(text).blank, text.length), undefined)
+    assert.equal(slot(text, text.length), undefined)
     const variable = '\tgetitem .@id'
-    assert.equal(idSlotAt(parts(variable).blank, variable.length), undefined)
+    assert.equal(slot(variable, variable.length), undefined)
+  })
+})
+
+describe('constantes en argument', () => {
+  it('reconnaît getitem Red_Potion et MOB_PORING, pas un appel ni une quantité', () => {
+    const text = '\tgetitem Red_Potion,1;\n\tmonster "prt",1,1,"x",MOB_PORING,1;\n\tgetitem getarg(0),Nombre;'
+    const { blank, regions } = parts(text)
+    assert.deepEqual(allRefs(text, blank, regions).map(ref => ref.constant ?? ref.id), ['Red_Potion', 'MOB_PORING'])
+    assert.equal(refAt(text, blank, regions, text.indexOf('Potion'))?.constant, 'Red_Potion')
   })
 })

@@ -13,6 +13,9 @@ import * as vscode from 'vscode'
 import { analyze, isRathena } from './documentCache'
 import { type DbEntry, type IdKind, describeEntry, isRenewal, loadDbTable } from './idHover'
 import { type IdRef, allRefs, idSlotAt, refAt } from './idRefs'
+import {
+  type IdInsertion, constantOf, insertionFor, readConstantTable, readHardcodedConstants, sharedAegisNames
+} from './scriptConstants'
 import { blankRegions } from './scriptChecks'
 import { readText, serverRoot } from './serverFiles'
 
@@ -20,13 +23,44 @@ const TABLES: Record<IdKind, string> = { item: 'db/item_db.yml', mob: 'db/mob_db
 const RENEWAL_HEADER = 'src/config/renewal.hpp'
 const UPDATE_DELAY_MS = 500
 
+const HARDCODED_CONSTANTS = 'src/map/script_constants.hpp'
+const CONSTANT_TABLE = 'db/const.yml'
+// Une chaîne d'imports qui se reboucle ne doit pas tourner sans fin.
+const MAX_CONSTANT_FILES = 32
+
 interface Table {
   byId: Map<number, DbEntry>
   // ⚠ SANS CASSE : le serveur retrouve un nom Aegis sans tenir compte de la casse.
   byAegis: Map<string, DbEntry>
+  // Les noms Aegis portés par plusieurs entrées : aucune constante sûre.
+  shared: Set<string>
 }
 
-interface Tables { root: vscode.Uri, item: Table, mob: Table }
+interface Tables {
+  root: vscode.Uri
+  item: Table
+  mob: Table
+  // Les constantes déjà posées quand les tables arrivent : un nom Aegis qui
+  // les heurte n'obtient pas la sienne.
+  reserved: Set<string>
+}
+
+async function loadReserved (root: vscode.Uri): Promise<Set<string>> {
+  const reserved = readHardcodedConstants(await readOrNothing(root, HARDCODED_CONSTANTS) ?? '')
+  const pending = [CONSTANT_TABLE]
+  const seen = new Set<string>()
+  while (pending.length > 0 && seen.size < MAX_CONSTANT_FILES) {
+    const relative = pending.shift() as string
+    if (seen.has(relative)) continue
+    seen.add(relative)
+    const text = await readOrNothing(root, relative)
+    if (text === undefined) continue
+    const table = readConstantTable(text)
+    table.names.forEach(name => reserved.add(name))
+    pending.push(...table.imports)
+  }
+  return reserved
+}
 
 async function readOrNothing (root: vscode.Uri, relative: string): Promise<string | undefined> {
   try {
@@ -42,19 +76,31 @@ async function loadTables (root: vscode.Uri): Promise<Tables> {
     const byId = await loadDbTable(TABLES[kind], async relative => await readOrNothing(root, relative), renewal)
     const byAegis = new Map<string, DbEntry>()
     for (const entry of byId.values()) if (entry.aegis !== '') byAegis.set(entry.aegis.toLowerCase(), entry)
-    return { byId, byAegis }
+    return { byId, byAegis, shared: sharedAegisNames(byId.values()) }
   }
-  return { root, item: await load('item'), mob: await load('mob') }
+  return { root, item: await load('item'), mob: await load('mob'), reserved: await loadReserved(root) }
 }
 
 function entryOf (tables: Tables, ref: IdRef): DbEntry | undefined {
   const table = tables[ref.kind]
-  return ref.id !== undefined ? table.byId.get(ref.id) : table.byAegis.get((ref.aegis ?? '').toLowerCase())
+  if (ref.id !== undefined) return table.byId.get(ref.id)
+  if (ref.constant === undefined) return table.byAegis.get((ref.aegis ?? '').toLowerCase())
+  // Une constante : `Red_Potion`, ou `MOB_PORING` pour un monstre. Elle ne
+  // désigne l'entrée que si le serveur la lui a bien donnée.
+  const aegis = ref.kind === 'mob' ? /^MOB_(.+)$/i.exec(ref.constant)?.[1] : ref.constant
+  const entry = aegis !== undefined ? table.byAegis.get(aegis.toLowerCase()) : undefined
+  return entry !== undefined && constantOf(ref.kind, entry, tables.reserved, table.shared) !== undefined ? entry : undefined
+}
+
+// Une constante inconnue ne se signale que si elle ne peut pas être une
+// variable : `MOB_…` en est une, un nom d'objet nu peut-être pas.
+function isReportable (ref: IdRef): boolean {
+  return ref.constant === undefined || (ref.kind === 'mob' && /^MOB_/i.test(ref.constant))
 }
 
 function whatOf (ref: IdRef): string {
   const noun = ref.kind === 'item' ? 'objet' : 'monstre'
-  return ref.id !== undefined ? `${noun} ${ref.id}` : `${noun} « ${ref.aegis ?? ''} »`
+  return ref.id !== undefined ? `${noun} ${ref.id}` : `${noun} « ${ref.constant ?? ref.aegis ?? ''} »`
 }
 
 export function registerIdHover (context: vscode.ExtensionContext): void {
@@ -88,7 +134,7 @@ export function registerIdHover (context: vscode.ExtensionContext): void {
     const { text, blank, regions } = refsOf(doc)
     const found: vscode.Diagnostic[] = []
     for (const ref of allRefs(text, blank, regions)) {
-      if (entryOf(tables, ref) !== undefined) continue
+      if (entryOf(tables, ref) !== undefined || !isReportable(ref)) continue
       const range = new vscode.Range(doc.positionAt(ref.start), doc.positionAt(ref.end))
       const diagnostic = new vscode.Diagnostic(range,
         `${whatOf(ref)[0].toUpperCase()}${whatOf(ref).slice(1)} absent des tables que charge le serveur.`,
@@ -166,18 +212,23 @@ export function registerIdHover (context: vscode.ExtensionContext): void {
     // ── LA COMPLÉTION PAR LE NOM ────────────────────────────────────────────
     vscode.languages.registerCompletionItemProvider({ language: 'rathena' }, {
       async provideCompletionItems (doc, position) {
-        const { blank } = refsOf(doc)
-        const slot = idSlotAt(blank, doc.offsetAt(position))
+        const { blank, regions } = refsOf(doc)
+        const slot = idSlotAt(blank, regions, doc.offsetAt(position))
         if (slot === undefined) return undefined
         const tables = await tablesFor(doc)
         if (tables === undefined) return undefined
+        // LA CONSTANTE, PAR DÉFAUT : `getitem Red_Potion` se lit sans table
+        // sous les yeux. Voir `insertionFor` pour les noms qui n'en ont pas.
+        const prefer = vscode.workspace.getConfiguration('rathena').get<IdInsertion>('completeIdsAs', 'constant')
+        const table = tables[slot.kind]
         const range = new vscode.Range(doc.positionAt(slot.start), doc.positionAt(slot.end))
         const items: vscode.CompletionItem[] = []
-        for (const entry of tables[slot.kind].byId.values()) {
+        for (const entry of table.byId.values()) {
+          if (slot.quoted && entry.aegis === '') continue
           const name = entry.name !== '' ? entry.name : entry.aegis
           const item = new vscode.CompletionItem({ label: name, description: `${entry.id} · ${entry.aegis}` },
             slot.kind === 'item' ? vscode.CompletionItemKind.Value : vscode.CompletionItemKind.Struct)
-          item.insertText = String(entry.id)
+          item.insertText = insertionFor(slot.kind, entry, slot, prefer, tables.reserved, table.shared)
           // Le nom, le nom Aegis et le nombre : on retrouve une entrée par l'un des trois.
           item.filterText = `${name} ${entry.aegis} ${entry.id}`
           item.range = range
@@ -185,7 +236,7 @@ export function registerIdHover (context: vscode.ExtensionContext): void {
         }
         return new vscode.CompletionList(items, false)
       }
-    })
+    }, '"')
   )
   vscode.workspace.textDocuments.forEach(checkLater)
 }

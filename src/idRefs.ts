@@ -9,16 +9,37 @@
 //   `^i[501]`, `<ITMR>501:nom</ITMR>`, `<ITEM>nom<INFO>501</INFO></ITEM>`,
 //   `<MOBL>1002:rang:nom</MOBL>`, `<MOBS>1002</MOBS>`, `<MOBP>1002</MOBP>`.
 
-import { type IdKind, idArgumentKind, idAt } from './idHover'
+import { type IdKind, idArgument, idArgumentKind, idAt } from './idHover'
 import { type Regions, contentOf, regionAt } from './lexer'
 
 export interface IdRef {
   kind: IdKind
-  // L'un ou l'autre : un identifiant, ou un nom Aegis.
+  // L'un des trois : un identifiant, un nom Aegis en chaîne, ou la constante
+  // de script d'un objet (`Red_Potion`) ou d'un monstre (`MOB_PORING`).
   id?: number
   aegis?: string
+  constant?: string
   start: number
   end: number
+}
+
+// Une constante en argument d'une commande qui lit un identifiant :
+// `getitem Red_Potion,1`. ⚠ CE PEUT ÊTRE UNE VARIABLE de personnage, qui
+// s'écrit sans préfixe : seule la table dira si c'est une constante.
+function constantAt (blank: string, offset: number): IdRef | undefined {
+  const word = /[A-Za-z0-9_]/
+  if (!word.test(blank[offset] ?? '')) return undefined
+  let start = offset
+  while (start > 0 && word.test(blank[start - 1])) --start
+  let end = offset
+  while (end < blank.length && word.test(blank[end])) ++end
+  const name = blank.slice(start, end)
+  if (!/^[A-Za-z_]/.test(name)) return undefined
+  if (start > 0 && /[.@$'#]/.test(blank[start - 1])) return undefined
+  // Un appel ou un tableau n'est pas une constante.
+  if (/^\s*[([]/.test(blank.slice(end, end + 8))) return undefined
+  const kind = idArgumentKind(blank, start, end)
+  return kind !== undefined ? { kind, constant: name, start, end } : undefined
 }
 
 const TEXT_TAGS: Array<{ kind: IdKind, pattern: RegExp }> = [
@@ -66,7 +87,8 @@ export function refAt (text: string, blank: string, regions: Regions, offset: nu
   const string = regionAt(regions.strings, offset)
   if (string === undefined) {
     const code = idAt(blank, offset)
-    return code !== undefined ? { kind: code.kind, id: code.id, start: code.start, end: code.end } : undefined
+    if (code !== undefined) return { kind: code.kind, id: code.id, start: code.start, end: code.end }
+    return constantAt(blank, offset)
   }
   const content = contentOf(string)
   const inText = textRefs(text.slice(content.start, content.end), content.start)
@@ -84,6 +106,10 @@ export function allRefs (text: string, blank: string, regions: Regions): IdRef[]
     const code = idAt(blank, match.index ?? 0)
     if (code !== undefined) refs.push({ kind: code.kind, id: code.id, start: code.start, end: code.end })
   }
+  for (const match of blank.matchAll(/(?<![A-Za-z0-9_])[A-Za-z_][A-Za-z0-9_]*/g)) {
+    const constant = constantAt(blank, match.index ?? 0)
+    if (constant !== undefined) refs.push(constant)
+  }
   regions.strings.forEach((string, index) => {
     const content = contentOf(string)
     refs.push(...textRefs(text.slice(content.start, content.end), content.start))
@@ -95,7 +121,28 @@ export function allRefs (text: string, blank: string, regions: Regions): IdRef[]
 
 // LA PLACE D'UN IDENTIFIANT EN COURS DE FRAPPE : le mot (lettres, chiffres,
 // `_`) sous le curseur, s'il est l'argument entier d'une commande qui en lit un.
-export function idSlotAt (blank: string, offset: number): { kind: IdKind, start: number, end: number } | undefined {
+//
+// Entre guillemets (`getitem "red`), la place est le contenu de la chaîne, et
+// ce qui s'y insère est un nom Aegis, sans guillemets.
+export interface IdSlot {
+  kind: IdKind
+  // La commande accepte un nom Aegis à cette place.
+  byName: boolean
+  // La place est le contenu d'une chaîne.
+  quoted: boolean
+  start: number
+  end: number
+}
+
+export function idSlotAt (blank: string, regions: Regions, offset: number): IdSlot | undefined {
+  const string = regionAt(regions.strings, offset)
+  if (string !== undefined) {
+    if (offset === string.start) return undefined
+    const argument = idArgument(blank, string.start, string.end, true)
+    if (argument === undefined || !argument.byName) return undefined
+    const content = contentOf(string)
+    return { ...argument, quoted: true, start: content.start, end: content.end }
+  }
   const word = /[A-Za-z0-9_]/
   let start = offset
   while (start > 0 && word.test(blank[start - 1])) --start
@@ -103,6 +150,6 @@ export function idSlotAt (blank: string, offset: number): { kind: IdKind, start:
   while (end < blank.length && word.test(blank[end])) ++end
   // Un mot qui suit un `.`, un `@` ou un `$` est une variable, pas un nom.
   if (start > 0 && /[.@$'#]/.test(blank[start - 1])) return undefined
-  const kind = idArgumentKind(blank, start, end, true)
-  return kind !== undefined ? { kind, start, end } : undefined
+  const argument = idArgument(blank, start, end, true)
+  return argument !== undefined ? { ...argument, quoted: false, start, end } : undefined
 }

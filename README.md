@@ -67,10 +67,11 @@ Chaque vérification préfère se taire que se tromper : un menu composé à l'e
 
 ## Identifiants d'objets et de monstres
 
-Un objet ou un monstre se reconnaît sous trois formes :
+Un objet ou un monstre se reconnaît sous quatre formes :
 
 - un nombre, argument entier d'une commande qui le lit (`getitem 501,1`, `countitem(909)`, `monster …,1002,1`) ;
-- un nom Aegis en chaîne, au même endroit (`getitem "Red_Potion",1`) ;
+- sa constante de script, au même endroit : le serveur enregistre le nom Aegis de chaque objet (`getitem Red_Potion,1`) et `MOB_` suivi de celui de chaque monstre (`monster …,MOB_PORING,1`) ;
+- un nom Aegis en chaîne, là où la commande l'accepte (`getitem "Red_Potion",1`) ;
 - une balise du texte d'un dialogue, que lit le client moonclient : `^i[501]`, `<ITMR>501:nom</ITMR>`, `<ITEM>nom<INFO>501</INFO></ITEM>`, `<MOBL>1002:rang:nom</MOBL>`, `<MOBS>1002</MOBS>`, `<MOBP>1002</MOBP>`.
 
 Sur chacune :
@@ -79,7 +80,12 @@ Sur chacune :
 - **F12** ouvre son entrée dans le `.yml` qui l'a écrite en dernier — celui dont la valeur l'emporte, donc celui où la corriger ;
 - **un identifiant absent des tables** que charge le serveur est signalé pendant la frappe (`rathena.checkScripts`) : un `getitem` ou un `monster` qui ne donnera rien.
 
-À la place d'un identifiant, **la complétion propose les objets ou les monstres par leur nom** — `red pot` trouve Red Potion, qui s'écrit `501` ; le nom Aegis et le nombre se cherchent aussi.
+À la place d'un identifiant, **la complétion propose les objets ou les monstres par leur nom** — `red pot` trouve Red Potion ; le nom Aegis et le nombre se cherchent aussi. Elle insère **la constante** (`Red_Potion`, `MOB_PORING`), qui documente le script d'elle-même et vaut dans toute commande (`rathena.completeIdsAs` : `constant` ou `id`). Sans constante sûre, le nom en chaîne si la commande l'accepte (`getitem "3D_Glasses"`), sinon le numéro :
+
+- un nom qui commence par un chiffre (`3D_Glasses`) ou porte un caractère hors identifiant (`Valkyrja's_Shield`) : le moteur ne le lirait pas comme un nom ;
+- un nom qui heurte une constante déjà posée (`script_constants.hpp`, `db/const.yml`) ou un autre objet : le serveur ne l'enregistre pas, et il vaudrait l'autre.
+
+Une constante d'objet inconnue n'est pas signalée — ce peut être une variable de personnage, qui s'écrit sans préfixe ; un `MOB_…` inconnu l'est.
 
 Les tables sont lues comme le serveur les charge : `db/item_db.yml` et `db/mob_db.yml`, puis chaque import du `Footer` chargé en entier, ses propres imports compris, avant le suivant ; un import dont le `Mode` n'est pas celui que compile `src/config/renewal.hpp` est sauté, comme un `Generator` ; `Header: Clear` vide la table ; une entrée déjà lue n'est complétée que des champs que l'import réécrit.
 
