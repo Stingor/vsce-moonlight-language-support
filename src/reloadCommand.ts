@@ -14,8 +14,7 @@ import * as vscode from 'vscode'
 import { isRathena } from './documentCache'
 import { exists, readText, serverRoot } from './serverFiles'
 import {
-  type AdminConf, type ChannelLine, DEFAULT_ADMIN_CONF, collectProblems, readAdminConf,
-  readChannelLine, reloadablePath
+  type AdminConf, type ChannelLine, collectProblems, loadAdminConf, readChannelLine, reloadablePath
 } from './serverReload'
 
 const ADMIN_CONF = 'conf/admin.conf'
@@ -29,21 +28,12 @@ function log (line: string): void {
   output.channel.appendLine(line)
 }
 
-// `conf/admin.conf`, puis ce qu'il importe, chaque import gagnant sur le précédent.
+// `conf/admin.conf` et ses imports, lus comme le serveur les lit.
 async function adminConf (root: vscode.Uri): Promise<AdminConf> {
-  let conf = DEFAULT_ADMIN_CONF
-  const pending = [ADMIN_CONF]
-  const seen = new Set<string>()
-  while (pending.length > 0) {
-    const relative = pending.shift() as string
-    if (seen.has(relative)) continue
-    seen.add(relative)
+  return await loadAdminConf(ADMIN_CONF, async relative => {
     const uri = vscode.Uri.joinPath(root, relative)
-    if (!await exists(uri)) continue
-    conf = readAdminConf(await readText(uri), conf)
-    pending.push(...conf.imports)
-  }
-  return conf
+    return await exists(uri) ? await readText(uri) : undefined
+  })
 }
 
 interface Exchange {
@@ -116,6 +106,12 @@ function toDiagnostics (doc: vscode.TextDocument, exchange: Exchange, file: stri
 }
 
 async function reload (doc: vscode.TextDocument, collection: vscode.DiagnosticCollection): Promise<void> {
+  // 🔴 UN DOSSIER NON FIABLE NE RECHARGE RIEN : il pourrait porter une fausse
+  // conf, et faire parler le canal d'administration à sa place.
+  if (!vscode.workspace.isTrusted) {
+    void vscode.window.showErrorMessage('Rechargement refusé : cet espace de travail n\'est pas marqué comme fiable.')
+    return
+  }
   const settings = vscode.workspace.getConfiguration('rathena.reload')
   const root = await serverRoot(doc.uri, ADMIN_CONF)
   if (root === undefined) {

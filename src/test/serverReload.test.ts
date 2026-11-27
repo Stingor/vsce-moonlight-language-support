@@ -1,9 +1,7 @@
 'use strict'
 
 import * as assert from 'assert'
-import {
-  DEFAULT_ADMIN_CONF, collectProblems, readAdminConf, readChannelLine, reloadablePath
-} from '../serverReload'
+import { collectProblems, loadAdminConf, readChannelLine, reloadablePath } from '../serverReload'
 
 const FILE = 'moon/quests/quests_19.npc'
 
@@ -11,29 +9,47 @@ function console (level: number, text: string): string {
   return `* ${level} ${text}`
 }
 
-describe('readAdminConf', () => {
-  it('lit port, secret et imports, en ignorant les commentaires', () => {
-    const conf = readAdminConf([
-      'admin_enable: yes',
-      'admin_port: 7799        // map-server',
-      'admin_secret: s3cret',
-      'admin_secret_md5: no',
-      'import: conf/import/admin_conf.txt'
-    ].join('\r\n'))
-    assert.equal(conf.enabled, true)
-    assert.equal(conf.port, 7799)
-    assert.equal(conf.secret, 's3cret')
-    assert.equal(conf.secretIsMd5, false)
-    assert.deepEqual(conf.imports, ['conf/import/admin_conf.txt'])
+function files (contents: Record<string, string[]>): (relative: string) => Promise<string | undefined> {
+  return async relative => contents[relative]?.join('\r\n')
+}
+
+describe('loadAdminConf', () => {
+  it('lit port, secret et interrupteurs, en ignorant les commentaires', async () => {
+    const conf = await loadAdminConf('conf/admin.conf', files({
+      'conf/admin.conf': [
+        '// le canal',
+        'admin_enable: yes',
+        'admin_port: 7799        // map-server',
+        'admin_secret: s3cret',
+        'admin_secret_md5: no'
+      ]
+    }))
+    assert.deepEqual(conf, { enabled: true, port: 7799, secret: 's3cret', secretIsMd5: false })
   })
 
-  it('un import gagne sur la conf qui l\'importe', () => {
-    const base = readAdminConf('admin_secret: CHANGE-ME-please\nadmin_port: 7799')
-    const conf = readAdminConf('admin_secret: vrai\nadmin_secret_md5: yes', base)
+  it('lit un import à sa ligne, en profondeur, comme le serveur', async () => {
+    const conf = await loadAdminConf('conf/admin.conf', files({
+      'conf/admin.conf': ['admin_secret: CHANGE-ME-please', 'import: conf/import/a.txt', 'admin_port: 7000'],
+      'conf/import/a.txt': ['admin_port: 6000', 'import: conf/import/b.txt'],
+      'conf/import/b.txt': ['admin_secret: vrai', 'admin_secret_md5: oui']
+    }))
+    // Le secret de l'import du second rang gagne ; le port écrit APRÈS l'import aussi.
     assert.equal(conf.secret, 'vrai')
-    assert.equal(conf.port, 7799)
     assert.equal(conf.secretIsMd5, true)
-    assert.deepEqual(DEFAULT_ADMIN_CONF.imports, [])
+    assert.equal(conf.port, 7000)
+  })
+
+  it('suit config_switch : « true » vaut faux, un nombre non nul vaut vrai', async () => {
+    const read = async (value: string): Promise<boolean> =>
+      (await loadAdminConf('c', files({ c: [`admin_enable: ${value}`] }))).enabled
+    assert.equal(await read('true'), false)
+    assert.equal(await read('1'), true)
+    assert.equal(await read('off'), false)
+  })
+
+  it('ne tourne pas sans fin sur un import qui se reboucle', async () => {
+    const conf = await loadAdminConf('a', files({ a: ['admin_port: 1', 'import: a'] }))
+    assert.equal(conf.port, 1)
   })
 })
 
@@ -89,5 +105,10 @@ describe('reloadablePath', () => {
     assert.equal(reloadablePath('moon\\a\\b.npc'), 'moon/a/b.npc')
     assert.equal(reloadablePath('npc/re/x.txt'), undefined)
     assert.equal(reloadablePath('moon/../conf/x.txt'), undefined)
+  })
+
+  it('refuse un saut de ligne, qui glisserait une seconde commande au canal', () => {
+    assert.equal(reloadablePath('moon/a.npc\nATCMD shutdown'), undefined)
+    assert.equal(reloadablePath('moon/a\r.npc'), undefined)
   })
 })

@@ -18,38 +18,134 @@ export interface DbEntry {
   level?: number
 }
 
-// Les fichiers qu'une table importe (`Footer: Imports: - Path: …`), sans ceux
-// mis en commentaire — c'est ainsi que le serveur choisit renewal ou non.
-export function readDbImports (text: string): string[] {
-  const paths: string[] = []
-  for (const match of text.matchAll(/^\s*-\s*Path:\s*(\S+)\s*$/gm)) paths.push(match[1])
-  return paths
+// Une entrée telle qu'un fichier l'écrit : un import peut ne réécrire que
+// certains champs d'une entrée déjà lue.
+export interface DbEntryFields {
+  id: number
+  aegis?: string
+  name?: string
+  level?: number
 }
 
-// Les entrées d'une table YAML d'objets ou de monstres. ⚠ SEULES LES CLÉS DE
-// L'ENTRÉE comptent, à l'indentation qui suit `- Id:` : plus bas, une liste
-// de butins porte aussi des noms.
-export function readDbEntries (text: string): DbEntry[] {
-  const entries: DbEntry[] = []
-  let current: DbEntry | undefined
+export interface DbImport {
+  path: string
+  // `Renewal` ou `Prerenewal` : l'import ne vaut que pour ce mode.
+  mode?: string
+  // Réservé au générateur de cartes : le map-server le saute.
+  generator: boolean
+}
+
+export interface DbFile {
+  // `Header: Clear: true` : la table repart vide avant ce fichier.
+  clear: boolean
+  entries: DbEntryFields[]
+  imports: DbImport[]
+}
+
+const YES = /^(true|yes)$/i
+
+// Une ligne de YAML sans son commentaire. ⚠ UNE LIGNE QUI COMMENCE PAR « # »
+// EST MORTE : c'est ainsi que les tables choisissent renewal ou non.
+function yamlLine (raw: string): string {
+  if (raw.trimStart().startsWith('#')) return ''
+  // Un « # » entre guillemets n'ouvre pas de commentaire : « "Carte #1" ».
+  return raw.includes('"') ? raw.trimEnd() : raw.replace(/\s+#.*$/, '').trimEnd()
+}
+
+// Un fichier de table YAML : son en-tête, ses entrées, ses imports.
+// ⚠ SEULES LES CLÉS DE L'ENTRÉE comptent, à l'indentation qui suit `- Id:` :
+// plus bas, une liste de butins porte aussi des noms.
+export function readDbFile (text: string): DbFile {
+  const file: DbFile = { clear: false, entries: [], imports: [] }
+  let section = ''
+  let current: DbEntryFields | undefined
   let keyIndent = -1
-  for (const line of text.split(/\r?\n/)) {
-    const start = /^(\s*)-\s+Id:\s*(\d+)\s*$/.exec(line)
-    if (start !== null) {
-      current = { id: Number(start[2]), aegis: '', name: '' }
-      keyIndent = start[1].length + 2
-      entries.push(current)
+  let imported: DbImport | undefined
+  for (const raw of text.split(/\r?\n/)) {
+    const line = yamlLine(raw)
+    if (line === '') continue
+    const top = /^([A-Za-z]+):\s*$/.exec(line)
+    if (top !== null) {
+      section = top[1]
+      current = undefined
+      imported = undefined
       continue
     }
-    if (current === undefined) continue
-    const key = /^(\s*)(AegisName|Name|Level):\s*(.*?)\s*$/.exec(line)
-    if (key === null || key[1].length !== keyIndent) continue
-    const value = key[3].replace(/^"(.*)"$/, '$1')
-    if (key[2] === 'AegisName') current.aegis = value
-    else if (key[2] === 'Name') current.name = value
-    else current.level = Number(value)
+    if (section === 'Header') {
+      const clear = /^\s+Clear:\s*(\S+)$/.exec(line)
+      if (clear !== null) file.clear = YES.test(clear[1])
+    } else if (section === 'Body') {
+      const start = /^(\s*)-\s+Id:\s*(\d+)$/.exec(line)
+      if (start !== null) {
+        current = { id: Number(start[2]) }
+        keyIndent = start[1].length + 2
+        file.entries.push(current)
+        continue
+      }
+      if (current === undefined) continue
+      const key = /^(\s*)(AegisName|Name|Level):\s*(.*)$/.exec(line)
+      if (key === null || key[1].length !== keyIndent) continue
+      const value = key[3].replace(/^"(.*)"$/, '$1')
+      if (key[2] === 'AegisName') current.aegis = value
+      else if (key[2] === 'Name') current.name = value
+      else current.level = Number(value)
+    } else if (section === 'Footer') {
+      const path = /^\s*-\s*Path:\s*(\S+)$/.exec(line)
+      if (path !== null) {
+        imported = { path: path[1], generator: false }
+        file.imports.push(imported)
+        continue
+      }
+      if (imported === undefined) continue
+      const option = /^\s+(Mode|Generator):\s*(\S+)$/.exec(line)
+      if (option === null) continue
+      if (option[1] === 'Mode') imported.mode = option[2]
+      else imported.generator = YES.test(option[2])
+    }
   }
-  return entries
+  return file
+}
+
+// Le mode que le serveur compile : `#define RENEWAL` actif dans
+// `src/config/renewal.hpp`. Sans ce fichier, celui de rAthena par défaut.
+export function isRenewal (renewalHeader: string | undefined): boolean {
+  if (renewalHeader === undefined) return true
+  return /^\s*#define\s+RENEWAL\s*(\/\/.*)?$/m.test(renewalHeader)
+}
+
+export type ReadFile = (relative: string) => Promise<string | undefined>
+
+// Au-delà, une chaîne d'imports se reboucle : le serveur tournerait sans fin.
+const MAX_IMPORT_DEPTH = 16
+
+// LA TABLE TELLE QUE LE SERVEUR LA CHARGE (`YamlDatabase::load`) : le corps du
+// fichier, puis chacun de ses imports, CHARGÉ EN ENTIER — ses propres imports
+// compris — AVANT LE SUIVANT. Une entrée déjà lue n'est que complétée des
+// champs que l'import réécrit.
+export async function loadDbTable (first: string, read: ReadFile, renewal: boolean): Promise<Map<number, DbEntry>> {
+  const table = new Map<number, DbEntry>()
+  const mode = renewal ? 'Renewal' : 'Prerenewal'
+  const load = async (relative: string, depth: number): Promise<void> => {
+    if (depth > MAX_IMPORT_DEPTH) return
+    const text = await read(relative)
+    if (text === undefined) return
+    const file = readDbFile(text)
+    if (file.clear) table.clear()
+    for (const fields of file.entries) {
+      const entry = table.get(fields.id) ?? { id: fields.id, aegis: '', name: '' }
+      if (fields.aegis !== undefined) entry.aegis = fields.aegis
+      if (fields.name !== undefined) entry.name = fields.name
+      if (fields.level !== undefined) entry.level = fields.level
+      table.set(fields.id, entry)
+    }
+    for (const imported of file.imports) {
+      if (imported.mode !== undefined && imported.mode !== mode) continue
+      if (imported.generator) continue
+      await load(imported.path, depth + 1)
+    }
+  }
+  await load(first, 0)
+  return table
 }
 
 // La place de l'identifiant, par commande ; `any` : tout argument en est un.
@@ -132,7 +228,13 @@ export function idAt (blank: string, offset: number): IdAtCursor | undefined {
   return { kind: rule.kind, id: Number(blank.slice(start, end)), start, end }
 }
 
-export function describeEntry (kind: IdKind, entry: DbEntry): string {
+// ⚠ DU TEXTE, PAS DU MARKDOWN : les noms viennent des fichiers de l'espace de
+// travail, et un nom écrit comme une image ou un lien ne doit rien charger.
+// Le survol les pose par `appendText`, qui échappe tout.
+export function describeEntry (kind: IdKind, entry: DbEntry): { name: string, detail: string } {
   const what = kind === 'item' ? `objet ${entry.id}` : `monstre ${entry.id}${entry.level !== undefined ? `, niveau ${entry.level}` : ''}`
-  return `**${entry.name !== '' ? entry.name : entry.aegis}** (\`${entry.aegis}\`) — ${what}`
+  return {
+    name: entry.name !== '' ? entry.name : entry.aegis,
+    detail: ` (${entry.aegis}) — ${what}`
+  }
 }

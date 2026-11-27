@@ -30,7 +30,7 @@
     "bugs": {
         "url": "https://github.com/Stingor/vsce-moonlight-language-support/issues"
     },
-    "version": "1.4.0",
+    "version": "1.4.1",
     "engines": {
         "vscode": "^1.120.0"
     },
@@ -43,6 +43,17 @@
         "onUri"
     ],
     "main": "./out/extension",
+    "capabilities": {
+        "untrustedWorkspaces": {
+            "supported": "limited",
+            "description": "Dans un espace de travail non fiable, le rechargement sur le serveur est refusé, et ses réglages ne se lisent pas depuis le dossier ouvert.",
+            "restrictedConfigurations": [
+                "rathena.reload.onSave",
+                "rathena.reload.host",
+                "rathena.reload.secret"
+            ]
+        }
+    },
     "contributes": {
         "languages": [
             {
@@ -159,12 +170,14 @@
                 },
                 "rathena.reload.host": {
                     "type": "string",
+                    "scope": "machine",
                     "default": "127.0.0.1",
                     "description": "L'hôte du canal d'administration. Sous Remote-SSH, l'extension tourne sur la machine du serveur : 127.0.0.1 suffit.",
                     "order": 11
                 },
                 "rathena.reload.secret": {
                     "type": "string",
+                    "scope": "machine",
                     "default": "",
                     "description": "Le secret du canal d'administration. Vide : celui de conf/admin.conf et de ses imports (impossible quand admin_secret_md5 est actif).",
                     "order": 12

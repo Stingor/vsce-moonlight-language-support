@@ -67,7 +67,7 @@ Chaque vérification préfère se taire que se tromper : un menu composé à l'e
 
 ## Survol des identifiants
 
-Survoler l'identifiant d'un objet ou d'un monstre donne son nom, son nom Aegis et, pour un monstre, son niveau — lus dans les tables que charge le serveur ouvert (`db/item_db.yml`, `db/mob_db.yml` et leurs imports actifs). Un identifiant absent de ces tables le dit. Le nombre n'est nommé que par la commande qui le lit (`getitem`, `countitem`, `delitem`, `monster`, `areamonster`…) et s'il est l'argument entier.
+Survoler l'identifiant d'un objet ou d'un monstre donne son nom, son nom Aegis et, pour un monstre, son niveau — lus dans les tables que charge le serveur ouvert, comme il les charge : `db/item_db.yml` et `db/mob_db.yml`, puis chaque import du `Footer` chargé en entier, ses propres imports compris, avant le suivant ; un import dont le `Mode` n'est pas celui que compile `src/config/renewal.hpp` est sauté, comme un `Generator` ; `Header: Clear` vide la table ; une entrée déjà lue n'est complétée que des champs que l'import réécrit. Un identifiant absent de ces tables le dit. Le nombre n'est nommé que par la commande qui le lit (`getitem`, `countitem`, `delitem`, `monster`, `areamonster`…) et s'il est l'argument entier.
 
 ## Depuis le jeu
 
@@ -77,6 +77,13 @@ Le client moonclient du staff ouvre les scripts dans VSCode :
 - **Alt+clic sur une ligne du dialogue** ouvre le script au `mes` qui l'a dite. Le client passe par l'adresse `vscode://stingor.moonlight-language-support/mes`, que l'extension reçoit dans la dernière fenêtre active : elle y cherche, dans le PNJ, la ligne dont les chaînes couvrent le plus le texte lu — codes couleur et morceaux calculés compris. Introuvable, le script s'ouvre à l'en-tête du PNJ.
 
 La fenêtre qui reçoit l'adresse doit voir le fichier : pour la prod, celle connectée en Remote-SSH au serveur.
+
+## Sécurité
+
+- **L'adresse `vscode://…/mes` peut venir de n'importe où**, une page web comprise. Elle n'ouvre qu'un fichier des dossiers ouverts dans la fenêtre, sans `..`, et ne fait que le montrer : ni écriture, ni commande, ni réseau, ni renvoi vers une autre adresse.
+- **Le rechargement est refusé dans un espace de travail non fiable.** `rathena.reload.host` et `rathena.reload.secret` sont des réglages de la machine : un dossier ouvert ne peut pas les poser, donc ni détourner le secret vers un autre hôte, ni le remplacer.
+- **Le canal d'administration est la vraie porte** : il exécute toute commande @ au niveau 99. L'extension n'y envoie que `@reloadnpcfile` sur le chemin du fichier ouvert, refusé s'il porte un caractère de contrôle. Le canal lui-même se garde côté serveur : `admin_secret` changé, `admin_allow` restreint, port fermé au pare-feu.
+- Les noms des tables s'affichent en texte échappé : un nom écrit comme un lien ou une image ne charge rien.
 
 ## Grammaire
 

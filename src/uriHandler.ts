@@ -5,16 +5,23 @@
 // `source` est l'adresse que le serveur donne pour ce PNJ, à la ligne de son
 // en-tête.
 //
-// ⚠ L'ADRESSE ARRIVE À LA DERNIÈRE FENÊTRE ACTIVE. Quand elle ne voit pas le
-// fichier — une autre connexion, ou aucune —, on rend la main à VSCode avec
-// l'adresse du serveur, qui ouvre au moins l'en-tête du PNJ.
+// ⚠ L'ADRESSE ARRIVE À LA DERNIÈRE FENÊTRE ACTIVE, ET N'IMPORTE QUI PEUT
+// L'ÉCRIRE : une page web aussi. D'où trois règles.
+// - Elle n'ouvre qu'un fichier d'un dossier ouvert dans CETTE fenêtre, sans
+//   « .. » : rien hors de l'espace de travail ne s'affiche.
+// - Elle ne rebondit vers AUCUNE autre adresse : renvoyer `source` à VSCode
+//   ferait de l'extension un relais vers n'importe quelle adresse `vscode://`,
+//   connexion SSH comprise.
+// - Elle ne fait qu'ouvrir et montrer : ni écriture, ni commande, ni réseau.
 
 import * as vscode from 'vscode'
 import { findSpokenLine, readSourceAddress } from './spokenLine'
 
 // Le fichier dans l'espace de travail de CETTE fenêtre : sous Remote-SSH, il
 // prend le schéma des dossiers ouverts, quel qu'il soit.
-function fileInWorkspace (path: string): vscode.Uri | undefined {
+export function fileInWorkspace (path: string): vscode.Uri | undefined {
+  // eslint-disable-next-line no-control-regex
+  if (path.split('/').includes('..') || /[\x00-\x1f]/.test(path)) return undefined
   for (const folder of vscode.workspace.workspaceFolders ?? []) {
     const root = folder.uri.path.replace(/\/$/, '')
     if (path.toLowerCase().startsWith(root.toLowerCase() + '/')) return folder.uri.with({ path })
@@ -22,22 +29,26 @@ function fileInWorkspace (path: string): vscode.Uri | undefined {
   return undefined
 }
 
+function notFound (): void {
+  void vscode.window.showWarningMessage('Ce script n\'est pas dans les dossiers ouverts de cette fenêtre : ' +
+    'ouvrir la source depuis la fenêtre connectée au serveur.')
+}
+
 async function openSpoken (source: string, text: string): Promise<void> {
   const address = readSourceAddress(source)
-  const fallback = async (): Promise<void> => { await vscode.env.openExternal(vscode.Uri.parse(source, true)) }
   const sameRemote = address !== undefined && (address.remote === undefined
     ? vscode.env.remoteName === undefined
     : address.remote.startsWith(`${vscode.env.remoteName ?? ''}+`))
   const uri = address !== undefined && sameRemote ? fileInWorkspace(address.path) : undefined
   if (address === undefined || uri === undefined) {
-    await fallback()
+    notFound()
     return
   }
   let doc: vscode.TextDocument
   try {
     doc = await vscode.workspace.openTextDocument(uri)
   } catch {
-    await fallback()
+    notFound()
     return
   }
   const lines = doc.getText().split(/\r?\n/)

@@ -23,35 +23,55 @@ export interface AdminConf {
   // Le secret de la conf est alors une empreinte MD5 : il ne sert pas à se
   // présenter, et il faut le vrai dans les réglages.
   secretIsMd5: boolean
-  imports: string[]
 }
 
 export const DEFAULT_ADMIN_CONF: AdminConf = {
   enabled: true,
   port: 7799,
   secret: '',
-  secretIsMd5: false,
-  imports: []
+  secretIsMd5: false
 }
 
-// Lit un fichier de conf rAthena (`clé: valeur`, commentaires `//`) par-dessus
-// `base` : une conf importée gagne sur celle qui l'importe.
-export function readAdminConf (text: string, base: AdminConf = DEFAULT_ADMIN_CONF): AdminConf {
-  const conf: AdminConf = { ...base, imports: [] }
-  for (const raw of text.split(/\r?\n/)) {
-    const line = raw.replace(/\/\/.*$/, '').trim()
-    const colon = line.indexOf(':')
-    if (colon <= 0) continue
-    const key = line.slice(0, colon).trim().toLowerCase()
-    const value = line.slice(colon + 1).trim()
-    switch (key) {
-      case 'admin_enable': conf.enabled = /^(yes|on|true|1)$/i.test(value); break
-      case 'admin_port': conf.port = Number.parseInt(value, 10); break
-      case 'admin_secret': conf.secret = value; break
-      case 'admin_secret_md5': conf.secretIsMd5 = /^(yes|on|true|1)$/i.test(value); break
-      case 'import': conf.imports.push(value); break
+export type ReadFile = (relative: string) => Promise<string | undefined>
+
+// Au-delà, une chaîne d'imports se reboucle.
+const MAX_IMPORT_DEPTH = 16
+
+// Un interrupteur comme `config_switch` du serveur : ces mots, sinon la valeur
+// numérique. ⚠ « true » n'en est PAS un : il vaut zéro, donc faux.
+function switchOn (value: string): boolean {
+  if (/^(on|yes|oui|ja|si|sim)$/i.test(value)) return true
+  const number = Number.parseInt(value, /^0x/i.test(value) ? 16 : 10)
+  return Number.isFinite(number) && number !== 0
+}
+
+// LA CONF DU CANAL TELLE QUE LE SERVEUR LA LIT (`admin_config_read`) : ligne à
+// ligne, et un `import:` est lu EN ENTIER, ses propres imports compris, À LA
+// PLACE DE SA LIGNE. Une clé écrite après l'import l'emporte donc sur lui, et
+// une clé qu'il écrit l'emporte sur celles d'avant.
+export async function loadAdminConf (first: string, read: ReadFile): Promise<AdminConf> {
+  const conf: AdminConf = { ...DEFAULT_ADMIN_CONF }
+  const load = async (relative: string, depth: number): Promise<void> => {
+    if (depth > MAX_IMPORT_DEPTH) return
+    const text = await read(relative)
+    if (text === undefined) return
+    for (const raw of text.split(/\r?\n/)) {
+      const line = raw.replace(/\/\/.*$/, '')
+      const match = /^([^:]+):\s*([^\t\r\n]*)$/.exec(line)
+      if (match === null) continue
+      const key = match[1].trim().toLowerCase()
+      const value = match[2].trimEnd()
+      if (value === '') continue
+      switch (key) {
+        case 'admin_enable': conf.enabled = switchOn(value); break
+        case 'admin_port': conf.port = Number.parseInt(value, 10); break
+        case 'admin_secret': conf.secret = value; break
+        case 'admin_secret_md5': conf.secretIsMd5 = switchOn(value); break
+        case 'import': await load(value, depth + 1); break
+      }
     }
   }
+  await load(first, 0)
   return conf
 }
 
@@ -142,8 +162,14 @@ export function collectProblems (lines: ChannelLine[], file: string): ReloadProb
 // Le chemin que la commande attend : relatif à la racine du serveur, en `/`.
 // ⚠ `@reloadnpcfile` préfixe `moon/` à ce qui n'y est pas : seul ce dossier est
 // chargé par le serveur, et un autre chemin y deviendrait faux.
+//
+// 🔴 AUCUN CARACTÈRE DE CONTRÔLE : le canal parle par lignes, et un saut de
+// ligne dans un nom de fichier y glisserait une seconde commande, exécutée
+// avec les droits du canal.
 export function reloadablePath (relative: string): string | undefined {
   const path = relative.replace(/\\/g, '/').replace(/^\.\//, '')
+  // eslint-disable-next-line no-control-regex
+  if (/[\x00-\x1f\x7f]/.test(path)) return undefined
   if (!path.startsWith('moon/') || path.split('/').includes('..')) return undefined
   return path
 }
