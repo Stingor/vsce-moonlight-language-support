@@ -43,8 +43,12 @@ function alternation (names, flags = '') {
   return `\\b${flags}(${names.map(escape).join('|')})\\b`
 }
 
+// Les commandes de rAthena, et celles qu'un serveur personnalisé déclare dans
+// src/custom/script_def.inc, que script.cpp inclut.
 function commands (server) {
-  const source = read(path.join(server, 'src', 'map', 'script.cpp'))
+  const custom = path.join(server, 'src', 'custom', 'script_def.inc')
+  const source = read(path.join(server, 'src', 'map', 'script.cpp')) +
+    (fs.existsSync(custom) ? '\n' + read(custom) : '')
   const names = []
   for (const match of source.matchAll(/^\s*BUILDIN_DEF\(\s*(\w+)\s*,/gm)) names.push(match[1])
   for (const match of source.matchAll(/^\s*BUILDIN_DEF2\(\s*\w+\s*,\s*"(\w+)"/gm)) names.push(match[1])

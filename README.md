@@ -36,7 +36,7 @@ Les scripts sont en Windows-1252, avec des îlots CP949 (noms de fichiers de la 
   - sur une étiquette (`callsub L_X`, `goto L_X`), cherchée d'abord dans le même PNJ ;
   - sur une fonction (`callfunc "F_X"`) ou un PNJ (`duplicate(Source)`, `enablenpc "Nom"`) ;
   - sur un événement (`donpcevent "Pnj::OnX"`) ;
-  - sur une commande (`getmotherid`, `mes`, `close3`), jusqu'à son `BUILDIN_FUNC` dans le `src/map/script.cpp` du serveur ouvert dans l'espace de travail ; un alias mène au code qu'il nomme.
+  - sur une commande (`getmotherid`, `mes`, `close3`), jusqu'à son `BUILDIN_FUNC` dans le `src/map/script.cpp` du serveur ouvert dans l'espace de travail, ou dans `src/custom/script.inc` pour une commande personnalisée — qui l'emporte alors sur l'original mis en commentaire ; un alias mène au code qu'il nomme, même déclaré dans `src/custom/script_def.inc`.
 
   L'index couvre les `.npc` de l'espace de travail et les `.txt` des dossiers `npc/`.
 - Le double-clic sélectionne une variable entière, préfixe compris : `.@var$`, `$@var`, `##var`, `'var`.
@@ -119,7 +119,7 @@ La fenêtre qui reçoit l'adresse doit voir le fichier : pour la prod, celle con
 
 ## Grammaire
 
-`syntaxes/rathena.json` est généré depuis `scripts/grammar-skeleton.json` et les sources du serveur : les commandes déclarées par `BUILDIN_DEF`, les paramètres et constantes de `script_constants.hpp`, et les cartes de `db/map_index.txt`. Après un ajout côté serveur :
+`syntaxes/rathena.json` est généré depuis `scripts/grammar-skeleton.json` et les sources du serveur : les commandes déclarées par `BUILDIN_DEF` dans `script.cpp` et `src/custom/script_def.inc`, les paramètres et constantes de `script_constants.hpp`, et les cartes de `db/map_index.txt`. Après un ajout côté serveur :
 
 ```
 npm run generate

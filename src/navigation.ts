@@ -7,7 +7,7 @@
 import * as vscode from 'vscode'
 import { TextDecoder } from 'util'
 import { analyze } from './documentCache'
-import { type BuiltinTarget, parseBuiltins } from './builtins'
+import { type BuiltinTarget, mergeBuiltins } from './builtins'
 import { regionAt, contentOf } from './lexer'
 import { type NamedLine, type NpcHeader, type ParsedScript, npcKeys, parseScript } from './npcSyntax'
 
@@ -16,15 +16,16 @@ const SCRIPT_GLOB = '{**/*.npc,**/npc/**/*.txt}'
 const EXCLUDE_GLOB = '**/node_modules/**'
 const IDENTIFIER = /[A-Za-z_][A-Za-z0-9_]*/
 const LABEL_SEPARATOR = '::'
-// Le source du serveur qui définit les commandes de script.
-const BUILTINS_GLOB = '**/src/map/script.cpp'
+// Les sources du serveur qui définissent les commandes de script : rAthena,
+// et ce qu'un serveur personnalisé y ajoute sous src/custom/.
+const BUILTINS_GLOB = '**/src/{map/script.cpp,custom/script.inc,custom/script_def.inc}'
 // Le 1252 décode tout octet ; un nom de PNJ y est lisible tel qu'écrit.
 const decoder = new TextDecoder('latin1')
 
 // Les commandes du serveur ouvert dans l'espace de travail, relues quand
-// script.cpp change.
+// l'une de ses sources change.
 class BuiltinIndex {
-  private loaded: Promise<Array<{ uri: vscode.Uri, targets: Map<string, BuiltinTarget> }>> | undefined
+  private loaded: Promise<Map<string, { key: string, target: BuiltinTarget }>> | undefined
 
   reset (): void {
     this.loaded = undefined
@@ -34,18 +35,18 @@ class BuiltinIndex {
     if (this.loaded === undefined) {
       this.loaded = (async () => {
         const uris = await vscode.workspace.findFiles(BUILTINS_GLOB, EXCLUDE_GLOB)
-        return await Promise.all(uris.map(async uri => ({
-          uri,
-          targets: parseBuiltins(decoder.decode(await vscode.workspace.fs.readFile(uri)))
+        // `script.cpp` d'abord : c'est lui qui inclut les fichiers personnalisés.
+        uris.sort((a, b) => Number(!a.path.endsWith('script.cpp')) - Number(!b.path.endsWith('script.cpp')))
+        const files = await Promise.all(uris.map(async uri => ({
+          key: uri.toString(),
+          text: decoder.decode(await vscode.workspace.fs.readFile(uri))
         })))
+        return mergeBuiltins(files)
       })()
     }
-    const found: vscode.Location[] = []
-    for (const { uri, targets } of await this.loaded) {
-      const target = targets.get(command.toLowerCase())
-      if (target !== undefined) found.push(new vscode.Location(uri, new vscode.Position(target.line, target.column)))
-    }
-    return found
+    const found = (await this.loaded).get(command.toLowerCase())
+    if (found === undefined) return []
+    return [new vscode.Location(vscode.Uri.parse(found.key), new vscode.Position(found.target.line, found.target.column))]
   }
 }
 
