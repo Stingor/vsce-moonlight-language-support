@@ -33,7 +33,7 @@ export function blankRegions (text: string, regions: Regions): string {
   return chars.join('')
 }
 
-interface Block {
+export interface Block {
   start: number
   end: number
   // Indice dans `script.headers`.
@@ -47,7 +47,7 @@ function lineStarts (text: string): number[] {
   return starts
 }
 
-function blocksOf (text: string, script: ParsedScript): Block[] {
+export function blocksOf (text: string, script: ParsedScript): Block[] {
   const starts = lineStarts(text)
   return script.headers.map((header, index) => {
     const next = script.headers[index + 1]

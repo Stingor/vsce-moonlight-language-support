@@ -99,6 +99,15 @@ La fenêtre qui reçoit l'adresse doit voir le fichier : pour la prod, celle con
 - **Le canal d'administration est la vraie porte** : il exécute toute commande @ au niveau 99. L'extension n'y envoie que `@reloadnpcfile` sur le chemin du fichier ouvert, refusé s'il porte un caractère de contrôle. Le canal lui-même se garde côté serveur : `admin_secret` changé, `admin_allow` restreint, port fermé au pare-feu.
 - Les noms des tables s'affichent en texte échappé : un nom écrit comme un lien ou une image ne charge rien.
 
+## Écrire
+
+- **Signature** : pendant qu'on tape une commande, ses écritures et ses paramètres s'affichent, celui qu'on remplit en gras, avec le premier paragraphe de son explication — lus dans `doc/script_commands.txt` du serveur ouvert.
+- **Complétion** :
+  - en début d'instruction, les commandes, avec leur signature ;
+  - après `goto` ou `callsub`, les étiquettes du PNJ ;
+  - dans la chaîne d'un `callfunc`, les fonctions ; d'un `donpcevent`, `doevent`, `addtimer`, `deltimer`, ou de l'événement d'un `monster` / `areamonster`, les événements « Pnj::OnX » ; d'un `enablenpc`, `disablenpc`, `hideonnpc`…, les PNJ par leur nom unique.
+- **Renommer** (`F2`) une étiquette ou une fonction locale : sa définition, ses `goto`, `callsub`, appels et `menu`, dans son PNJ seulement, sans tenir compte de la casse — comme le moteur. Une étiquette `On…` est un événement qu'un autre PNJ peut appeler par son nom : elle ne se renomme pas d'ici, et un nouveau nom ne peut pas en devenir une.
+
 ## Grammaire
 
 `syntaxes/rathena.json` est généré depuis `scripts/grammar-skeleton.json` et les sources du serveur : les commandes déclarées par `BUILDIN_DEF`, les paramètres et constantes de `script_constants.hpp`, et les cartes de `db/map_index.txt`. Après un ajout côté serveur :

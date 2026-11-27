@@ -97,9 +97,19 @@ function documentSymbols (doc: vscode.TextDocument): vscode.DocumentSymbol[] {
 
 interface Target { uri: vscode.Uri, line: number, column: number }
 
-class WorkspaceIndex {
+interface IndexedFile {
+  npcs: Map<string, Target[]>
+  labels: Map<string, Target[]>
+  // Pour la complétion : les fonctions globales, et les événements sous leur
+  // nom complet « Pnj::OnX ».
+  functions: string[]
+  events: string[]
+  npcNames: string[]
+}
+
+export class WorkspaceIndex {
   // Par fichier, pour qu'une modification ne réindexe que lui.
-  private readonly files = new Map<string, { npcs: Map<string, Target[]>, labels: Map<string, Target[]> }>()
+  private readonly files = new Map<string, IndexedFile>()
   private ready: Promise<void> | undefined
 
   async npcs (name: string): Promise<Target[]> {
@@ -132,7 +142,19 @@ class WorkspaceIndex {
         push(labels, key + LABEL_SEPARATOR + label.name, { uri, line: label.line, column: label.column })
       }
     }
-    this.files.set(uri.toString(), { npcs, labels })
+    const functions = script.headers.filter(header => header.kind === 'function').map(header => header.name)
+    // Un PNJ se désigne par son nom UNIQUE, celui d'après « :: » s'il y en a un.
+    const uniqueName = (header: NpcHeader): string => {
+      const keys = npcKeys(header.name)
+      return keys.length > 1 ? keys[1] : keys[0]
+    }
+    const npcNames = script.headers.filter(header => header.kind !== 'function').map(uniqueName)
+    const events: string[] = []
+    for (const label of script.labels) {
+      if (label.owner < 0 || !label.name.startsWith('On')) continue
+      events.push(`${uniqueName(script.headers[label.owner])}${LABEL_SEPARATOR}${label.name}`)
+    }
+    this.files.set(uri.toString(), { npcs, labels, functions, events, npcNames })
   }
 
   remove (uri: vscode.Uri): void {
@@ -147,7 +169,15 @@ class WorkspaceIndex {
     }
   }
 
-  private collect (pick: (entry: { npcs: Map<string, Target[]>, labels: Map<string, Target[]> }) => Target[] | undefined): Target[] {
+  // Les noms d'un genre, sans doublon, pour la complétion.
+  async names (kind: 'functions' | 'events' | 'npcNames'): Promise<string[]> {
+    await this.load()
+    const names = new Set<string>()
+    this.files.forEach(entry => { entry[kind].forEach(name => names.add(name)) })
+    return [...names]
+  }
+
+  private collect (pick: (entry: IndexedFile) => Target[] | undefined): Target[] {
     const found: Target[] = []
     this.files.forEach(entry => { found.push(...(pick(entry) ?? [])) })
     return found
@@ -217,7 +247,7 @@ async function definitions (index: WorkspaceIndex, builtins: BuiltinIndex, doc: 
   return (await index.npcs(word)).map(toLocation)
 }
 
-export function registerNavigation (context: vscode.ExtensionContext): void {
+export function registerNavigation (context: vscode.ExtensionContext): WorkspaceIndex {
   const index = new WorkspaceIndex()
   const builtins = new BuiltinIndex()
   const watcher = vscode.workspace.createFileSystemWatcher(SCRIPT_GLOB)
@@ -238,4 +268,5 @@ export function registerNavigation (context: vscode.ExtensionContext): void {
       provideDefinition: async (doc, position) => await definitions(index, builtins, doc, position)
     })
   )
+  return index
 }
