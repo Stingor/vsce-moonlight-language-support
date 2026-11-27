@@ -19,6 +19,15 @@ export interface SourceAddress {
   line: number
 }
 
+// Un reste d'encodage (`%2B`, `%20`) se décode ; un « % » littéral reste tel quel.
+function decodeOnce (text: string): string {
+  try {
+    return decodeURIComponent(text)
+  } catch {
+    return text
+  }
+}
+
 // L'adresse que compose le serveur : `vscode://file/<chemin>:<ligne>:<col>` ou
 // `vscode://vscode-remote/<autorité>/<chemin>:<ligne>:<col>`.
 export function readSourceAddress (url: string): SourceAddress | undefined {
@@ -26,13 +35,35 @@ export function readSourceAddress (url: string): SourceAddress | undefined {
   const remote = /^vscode:\/\/vscode-remote\/([^/]+)(\/.*)$/.exec(url)
   const rest = local?.[1] ?? remote?.[2]
   if (rest === undefined) return undefined
-  const position = /^(.*?)(?::(\d+))?(?::(\d+))?$/.exec(decodeURIComponent(rest))
+  const position = /^(.*?)(?::(\d+))?(?::(\d+))?$/.exec(decodeOnce(rest))
   if (position === null) return undefined
   return {
-    remote: remote !== null ? decodeURIComponent(remote[1]) : undefined,
+    remote: remote !== null ? decodeOnce(remote[1]) : undefined,
     path: position[1],
     line: position[2] !== undefined ? Number(position[2]) : 1
   }
+}
+
+// LA REQUÊTE DE `vscode://…/mes?source=…&text=…`, telle que VSCode la remet.
+//
+// 🔴 PAS DE `URLSearchParams` : VSCode remet la requête DÉJÀ DÉCODÉE, et lui
+// changerait chaque « + » en espace — celui de `ssh-remote+<hôte>` d'abord,
+// d'où une adresse qui ne désigne plus la fenêtre connectée. Et un « & » du
+// texte, décodé lui aussi, couperait la requête en deux. Le texte vient donc
+// en dernier, et prend tout ce qui suit `&text=`.
+//
+// Une requête encore encodée (`source=vscode%3A…`) se décode ici, une fois.
+export function readMesQuery (query: string): { source: string, text: string } | undefined {
+  const match = /^source=(.*?)&text=(.*)$/s.exec(query)
+  if (match === null) return undefined
+  if (/^vscode%3A/i.test(match[1])) {
+    try {
+      return { source: decodeURIComponent(match[1]), text: decodeURIComponent(match[2]) }
+    } catch {
+      return undefined
+    }
+  }
+  return { source: match[1], text: match[2] }
 }
 
 // Les mots que l'on compare : sans codes couleur, sans casse, espaces réunis.

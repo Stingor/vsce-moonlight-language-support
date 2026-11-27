@@ -15,7 +15,7 @@
 // - Elle ne fait qu'ouvrir et montrer : ni écriture, ni commande, ni réseau.
 
 import * as vscode from 'vscode'
-import { findSpokenLine, readSourceAddress } from './spokenLine'
+import { type SourceAddress, findSpokenLine, readMesQuery, readSourceAddress } from './spokenLine'
 
 // Le fichier dans l'espace de travail de CETTE fenêtre : sous Remote-SSH, il
 // prend le schéma des dossiers ouverts, quel qu'il soit.
@@ -29,9 +29,13 @@ export function fileInWorkspace (path: string): vscode.Uri | undefined {
   return undefined
 }
 
-function notFound (): void {
-  void vscode.window.showWarningMessage('Ce script n\'est pas dans les dossiers ouverts de cette fenêtre : ' +
-    'ouvrir la source depuis la fenêtre connectée au serveur.')
+// Le message dit ce qui était visé, et d'où : c'est ce qui permet de voir si
+// l'hôte ou le dossier ne correspond pas.
+function notFound (address: SourceAddress | undefined): void {
+  const where = address === undefined
+    ? 'adresse illisible'
+    : `${address.path} (${address.remote ?? 'local'}), fenêtre : ${vscode.env.remoteName ?? 'locale'}`
+  void vscode.window.showWarningMessage(`Ce script n'est pas dans les dossiers ouverts de cette fenêtre — ${where}.`)
 }
 
 async function openSpoken (source: string, text: string): Promise<void> {
@@ -41,14 +45,14 @@ async function openSpoken (source: string, text: string): Promise<void> {
     : address.remote.startsWith(`${vscode.env.remoteName ?? ''}+`))
   const uri = address !== undefined && sameRemote ? fileInWorkspace(address.path) : undefined
   if (address === undefined || uri === undefined) {
-    notFound()
+    notFound(address)
     return
   }
   let doc: vscode.TextDocument
   try {
     doc = await vscode.workspace.openTextDocument(uri)
   } catch {
-    notFound()
+    notFound(address)
     return
   }
   const lines = doc.getText().split(/\r?\n/)
@@ -66,10 +70,9 @@ export function registerSpokenLineHandler (context: vscode.ExtensionContext): vo
   context.subscriptions.push(vscode.window.registerUriHandler({
     handleUri (uri: vscode.Uri) {
       if (uri.path !== '/mes') return
-      const query = new URLSearchParams(uri.query)
-      const source = query.get('source') ?? ''
-      if (!source.startsWith('vscode://')) return
-      void openSpoken(source, query.get('text') ?? '')
+      const query = readMesQuery(uri.query)
+      if (query === undefined || !query.source.startsWith('vscode://')) return
+      void openSpoken(query.source, query.text)
     }
   }))
 }

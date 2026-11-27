@@ -1,7 +1,7 @@
 'use strict'
 
 import * as assert from 'assert'
-import { findSpokenLine, normalizeSpoken, readSourceAddress } from '../spokenLine'
+import { findSpokenLine, normalizeSpoken, readMesQuery, readSourceAddress } from '../spokenLine'
 
 describe('readSourceAddress', () => {
   it('lit une adresse locale et une adresse Remote-SSH', () => {
@@ -10,6 +10,24 @@ describe('readSourceAddress', () => {
     assert.deepEqual(readSourceAddress('vscode://vscode-remote/ssh-remote+serveur.exemple/srv/moon/b%20c.npc:7:1'),
       { remote: 'ssh-remote+serveur.exemple', path: '/srv/moon/b c.npc', line: 7 })
     assert.equal(readSourceAddress('https://exemple.org/x'), undefined)
+  })
+})
+
+describe('readMesQuery', () => {
+  it('garde le « + » de l\'hôte et le « & » du texte d\'une requête déjà décodée', () => {
+    // Ce que VSCode remet : la requête décodée, telle quelle.
+    const query = 'source=vscode://vscode-remote/ssh-remote+serveur.exemple/srv/moon/a.npc:7:1&text=Pain & beurre + sel'
+    assert.deepEqual(readMesQuery(query), {
+      source: 'vscode://vscode-remote/ssh-remote+serveur.exemple/srv/moon/a.npc:7:1',
+      text: 'Pain & beurre + sel'
+    })
+    assert.equal(readSourceAddress(readMesQuery(query)?.source ?? '')?.remote, 'ssh-remote+serveur.exemple')
+  })
+
+  it('décode une fois une requête restée encodée, et refuse une requête étrangère', () => {
+    assert.deepEqual(readMesQuery('source=vscode%3A%2F%2Ffile%2Fx.npc%3A2%3A1&text=a%2Bb'),
+      { source: 'vscode://file/x.npc:2:1', text: 'a+b' })
+    assert.equal(readMesQuery('text=a&source=b'), undefined)
   })
 })
 
